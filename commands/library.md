@@ -33,11 +33,19 @@ When no arguments are provided:
 2. If the file doesn't exist or is empty, report:
    > No books in your library yet. Use `/content-to-skill` to add books, or `/library --migrate` to import existing book-skills.
 
-3. If books exist, display a table:
+3. If books exist, for each book that has a `coverImage` field (non-null), read the cover image file:
+   ```
+   Read ~/.claude/library/books/<name>/cover.png
+   ```
+   This will display the cover inline.
+
+4. Display a table with all books:
 
    | # | Name | Title | Author | Category | Tags |
    |---|------|-------|--------|----------|------|
    | 1 | `mom-test` | The Mom Test | Rob Fitzpatrick | business | customer-discovery, validation |
+
+   Show each book's cover image directly above or beside its table entry. If a book has no cover, skip it silently.
 
    Then add:
    > Use `/library <name>` to load a book's knowledge into this conversation.
