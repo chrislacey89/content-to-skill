@@ -6,20 +6,35 @@ Chunks documents, extracts knowledge in parallel, and synthesizes structured ski
 
 ## Installation
 
-```
+1. **Add the plugin from the marketplace:**
+
+```bash
 /plugin marketplace add chrislacey89/content-to-skill
+```
+
+2. **Install the plugin:**
+
+```bash
 /plugin install content-to-skill@chrislacey89-content-to-skill
 ```
 
 ## Quick Start
 
-```
+1. **Convert a book into a skill:**
+
+```bash
 /content-to-skill path/to/book.pdf --name my-book
 ```
 
-Once converted, load the book into any conversation:
+2. **Browse your library:**
 
+```bash
+/library
 ```
+
+3. **Load a book into any conversation:**
+
+```bash
 /library my-book
 ```
 
