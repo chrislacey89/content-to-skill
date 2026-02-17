@@ -1,7 +1,7 @@
 ---
 title: Add Biome as formatter and linter
 type: feat
-status: active
+status: completed
 date: 2026-02-17
 ---
 
@@ -13,12 +13,12 @@ Add Biome as the project's formatter and linter. No existing formatters or linte
 
 ## Acceptance Criteria
 
-- [ ] `@biomejs/biome` installed as exact dev dependency
-- [ ] `biome.json` created with sensible defaults for this project
-- [ ] `npm run format`, `npm run lint`, and `npm run check` scripts work
-- [ ] All existing source and test files are formatted
-- [ ] Tests pass after formatting
-- [ ] `CLAUDE.md` updated with formatting conventions
+- [x] `@biomejs/biome` installed as exact dev dependency
+- [x] `biome.json` created with sensible defaults for this project
+- [x] `npm run format`, `npm run lint`, and `npm run check` scripts work
+- [x] All existing source and test files are formatted
+- [x] Tests pass after formatting
+- [x] `CLAUDE.md` updated with formatting conventions
 
 ## Implementation
 
