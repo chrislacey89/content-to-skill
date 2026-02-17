@@ -1,0 +1,15 @@
+{
+  "name": "content-to-skill",
+  "version": "1.0.0",
+  "description": "Document chunker for content-to-skill pipeline",
+  "main": "scripts/chunk_document.js",
+  "scripts": {
+    "chunk": "node scripts/chunk_document.js"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.3.5",
+    "html-to-text": "^9.0.5",
+    "jszip": "^3.10.1",
+    "pdf-lib": "^1.17.1"
+  }
+}
