@@ -1,0 +1,10 @@
+{
+  "name": "test-book",
+  "title": "Test Book Title",
+  "author": "Test Author",
+  "year": 2024,
+  "category": "business",
+  "tags": ["testing", "example"],
+  "description": "A test book for validating library indexing.",
+  "referenceFiles": ["references/ref.md"]
+}

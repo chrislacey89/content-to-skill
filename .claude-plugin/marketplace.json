@@ -1,0 +1,9 @@
+{
+  "plugins": [
+    {
+      "name": "content-to-skill",
+      "source": ".",
+      "description": "Transform PDFs and EPUBs into Claude Code Agent Skills"
+    }
+  ]
+}

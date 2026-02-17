@@ -1,9 +1,9 @@
 ---
 name: content-to-skill
 description: "Transforms PDFs and EPUBs into Claude Code Agent Skills by chunking, extracting, and converting document content into structured skill packages with progressive disclosure. Use when converting books or documents into reusable agent skills."
-argument-hint: "<path> [--name <skill-name>] [--install project|personal] [--on-conflict overwrite|cancel]"
+argument-hint: "<path> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel]"
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Glob, Bash(node:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*)
+allowed-tools: Read, Write, Edit, Glob, Task, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*)
 ---
 
 # Content to Skill
@@ -18,7 +18,7 @@ Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the 
 |------|---------|-------------|
 | `<path>` | (required) | Path to the PDF or EPUB file |
 | `--name <name>` | (prompt user) | Kebab-case skill name (max 64 chars, lowercase alphanumeric + hyphens) |
-| `--install <location>` | (prompt user) | `project` or `personal` |
+| `--install <location>` | `library` | `library`, `project`, or `personal` |
 | `--on-conflict <action>` | `overwrite` | `overwrite` or `cancel` |
 | `--pages <n>` | `5` | Pages/sections per chunk |
 
@@ -31,7 +31,7 @@ Copy this checklist and update as you complete each step:
 - [ ] Step 2: Chunk document
 - [ ] Step 3: Extract content (Pass 1 — per-chunk)
 - [ ] Step 4: Synthesize (Pass 2 — book-level)
-- [ ] Step 5: Convert to skill
+- [ ] Step 5: Convert to skill (includes book.json)
 - [ ] Step 6: Install skill
 ```
 
@@ -39,10 +39,10 @@ Copy this checklist and update as you complete each step:
 
 If you have lost context (e.g., after compaction), reconstruct state by reading these files from the working directory:
 
-1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and chunk you were on
-2. Read `/tmp/content-to-skill/<name>/running-context.md` — the extraction state
-3. Read `/tmp/content-to-skill/<name>/book-spine.md` — chapter summaries so far
-4. Resume from the last completed chunk or step
+1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and batch you were on
+2. Read `/tmp/content-to-skill/<name>/running-context.md` — the extraction state (built by Pass 2)
+3. Read `/tmp/content-to-skill/<name>/book-spine.md` — chapter summaries (built by Pass 2)
+4. Resume from the last completed batch or step
 
 ## Step 1: Validate Input and Setup
 
@@ -70,7 +70,7 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
 
 1. Run the chunker:
    ```
-   node ${CLAUDE_PLUGIN_ROOT}/scripts/chunk_document.js "<input_file>" -p <pages> -o /tmp/content-to-skill/<name>/chunks
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/chunk_document.ts "<input_file>" -p <pages> -o /tmp/content-to-skill/<name>/chunks
    ```
    Use the `--pages` value from arguments (default: 5).
 
@@ -83,69 +83,89 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
 
 4. Update `progress.json`:
    ```json
-   { "step": "extracting", "skillName": "<name>", "totalChunks": N, "lastCompletedChunk": 0, "status": "in_progress" }
+   { "step": "extracting", "skillName": "<name>", "totalChunks": N, "totalBatches": B, "lastCompletedBatch": 0, "status": "in_progress" }
    ```
 
-## Step 3: Extract Content (Pass 1 — Per-Chunk)
+## Step 3: Extract Content (Parallel)
 
-Read the extraction methodology ONCE:
+Read the extraction methodology ONCE and capture its full contents:
 ```
 Read ${CLAUDE_PLUGIN_ROOT}/references/research-prompt.md
 ```
 
-Then process each chunk sequentially:
+Store the contents of `research-prompt.md` in memory — you will inline it into every subagent prompt.
 
-### For chunk 1:
-1. Read the chunk file: `/tmp/content-to-skill/<name>/chunks/chunk_001.pdf` (or `.txt` for EPUB)
-2. Apply the full extraction methodology from `research-prompt.md`
-3. Write the extraction output to: `/tmp/content-to-skill/<name>/extraction-chunk-001.md`
-4. Write the initial running context to: `/tmp/content-to-skill/<name>/running-context.md`
-5. Write the initial terminology bank to: `/tmp/content-to-skill/<name>/terminology.md`
-6. Start the book spine: `/tmp/content-to-skill/<name>/book-spine.md` with one-line chapter summary
+### Pass 1 — Parallel Chunk Extraction (batches of 5)
 
-### For chunks 2 through N:
-1. Read: `/tmp/content-to-skill/<name>/running-context.md`
-2. Read: `/tmp/content-to-skill/<name>/terminology.md`
-3. Read the next chunk file
-4. Apply extraction using this compressed reminder (NOT the full research prompt):
-   > Continue extraction. Follow the same schema as chunk 1. Focus on: key frameworks, actionable advice, definitions, notable quotes. Maintain terminology consistency with the terminology bank.
-5. Write extraction to: `/tmp/content-to-skill/<name>/extraction-chunk-NNN.md`
-6. Update `running-context.md` (OVERWRITE — cap at 2,000 tokens):
-   - Keep only the 15 most important concepts
-   - Prune resolved threads
-   - Merge recurring themes
-7. Append new terms to `terminology.md`
-8. Append one-line chapter summary to `book-spine.md`
-9. Update `progress.json` with `lastCompletedChunk: N`
-10. Report: "Chunk N/M complete."
+1. Read `manifest.json` to get the total chunk count and file extension (`.pdf` or `.txt`)
+2. Group chunks into batches of 5 (e.g., chunks 1-5, 6-10, 11-15, ...)
+3. For each batch, spawn up to 5 subagents via `Task` in a **single message** (parallel execution)
+4. Each subagent uses `subagent_type: "general-purpose"` with this prompt template:
 
-### Running Context Format
-
-```markdown
-## Running Context
-
-### Core Thesis (frozen after Chapter 1)
-[2-3 sentences]
-
-### Key Concepts (top 15)
-- [Term]: [brief definition] (Ch. N)
-
-### Unresolved Threads (max 5)
-- [Topic the author promised to address later]
-
-### Recurring Themes (3-5)
-- [Theme]: [how it's developing]
 ```
+You are extracting knowledge from a book chunk. Follow the methodology exactly.
 
-### Hard Constraints for Extraction
+## Task
+1. Read: /tmp/content-to-skill/<name>/chunks/chunk_NNN.<ext>
+2. Apply the extraction methodology below to produce a structured extraction
+3. Write your extraction to: /tmp/content-to-skill/<name>/extraction-chunk-NNN.md
+4. Return a one-line summary: "Chunk NNN: [Chapter Title] — [2-3 key concepts found]"
+
+## Hard Constraints
 - Never fabricate content not present in the source chunk
 - Flag uncertain content with [UNCLEAR: reason]
-- If a chunk is unreadable, write an Extraction Error block and continue to the next chunk
+- If the chunk is unreadable, write an Extraction Error block and return "Chunk NNN: EXTRACTION ERROR"
 - Preserve exact quotes for definitional statements
 
-## Step 4: Synthesize (Pass 2 — Book-Level)
+## Extraction Methodology
+[full contents of research-prompt.md inlined here]
+```
 
-After all chunks are extracted:
+5. Wait for the batch to complete, then:
+   - Report progress: "Batch B/T complete (chunks X-Y). Summaries: [list one-line summaries]"
+   - Update `progress.json` with `lastCompletedBatch: B`
+6. Repeat for the next batch until all chunks are processed
+
+### Pass 2 — Cross-Reference Enrichment
+
+After ALL chunks are extracted, spawn ONE subagent via `Task` with `subagent_type: "general-purpose"`:
+
+```
+You are cross-referencing extractions from a book to build a unified knowledge map.
+
+## Task
+1. Use Glob to find all extraction files: /tmp/content-to-skill/<name>/extraction-chunk-*.md
+2. Read each extraction file in order (chunk-001, chunk-002, etc.)
+3. Build and write these files:
+
+   /tmp/content-to-skill/<name>/running-context.md:
+   ## Running Context
+   ### Core Thesis
+   [2-3 sentences capturing the book's central argument]
+   ### Key Concepts (top 15)
+   - [Term]: [brief definition] (Ch. N)
+   ### Unresolved Threads (max 5)
+   - [Topic the author promised to address later]
+   ### Recurring Themes (3-5)
+   - [Theme]: [how it's developing across chapters]
+
+   /tmp/content-to-skill/<name>/terminology.md:
+   All coined terms, definitions, and the chapter where each first appears.
+
+   /tmp/content-to-skill/<name>/book-spine.md:
+   One-line summary per chapter, in order.
+
+4. Return a summary of: core thesis, main themes, and key cross-chapter connections found.
+```
+
+Wait for this subagent to complete, then report its summary and update `progress.json`:
+```json
+{ "step": "synthesizing", "status": "in_progress", ... }
+```
+
+## Step 4: Synthesize
+
+Pass 2 already built `running-context.md`, `terminology.md`, and `book-spine.md`. This step just produces the final summary.
 
 1. Read: `/tmp/content-to-skill/<name>/book-spine.md`
 2. Read: `/tmp/content-to-skill/<name>/terminology.md`
@@ -194,14 +214,33 @@ Follow the instructions in `skill-conversion.md` to:
    - Link to all reference files
    - Keep under 500 lines
 
-4. **Self-verify**:
+4. **Create book.json**:
+   - Read `/tmp/content-to-skill/<name>/EXTRACTION_SUMMARY.md` for metadata (title, author, year, category)
+   - Collect all reference filenames from `/tmp/content-to-skill/<name>/skill/references/`
+   - Write `/tmp/content-to-skill/<name>/skill/book.json`:
+     ```json
+     {
+       "name": "<name>",
+       "title": "<Book Title>",
+       "author": "<Author Name>",
+       "year": <year or null>,
+       "category": "<category>",
+       "tags": ["<tag1>", "<tag2>", "..."],
+       "description": "<One-sentence description from SKILL.md frontmatter>",
+       "referenceFiles": ["references/core-framework.md", "..."]
+     }
+     ```
+   - Infer `tags` from the book's key themes (3-7 kebab-case tags)
+
+5. **Self-verify**:
    - All reference files linked in SKILL.md exist
    - SKILL.md is under 500 lines
    - All relative paths are correct
    - Frontmatter is valid (name matches directory name)
+   - `book.json` has all required fields (name, title, description)
    - Fix any issues found
 
-5. Update `progress.json`:
+6. Update `progress.json`:
    ```json
    { "step": "installing", "status": "in_progress", ... }
    ```
@@ -209,9 +248,9 @@ Follow the instructions in `skill-conversion.md` to:
 ## Step 6: Install Skill
 
 1. Get install location:
+   - If `--install library` was provided (or no `--install` flag — this is the default), use `~/.claude/library/books/<name>/`
    - If `--install project` was provided, use `.claude/skills/<name>/`
    - If `--install personal` was provided, use `~/.claude/skills/<name>/`
-   - If neither, ask: "Install as project skill (`.claude/skills/<name>/`) or personal skill (`~/.claude/skills/<name>/`)?"
 
 2. Check if target directory exists:
    - If `--on-conflict cancel` and directory exists, stop with message
@@ -223,29 +262,44 @@ Follow the instructions in `skill-conversion.md` to:
    cp -r /tmp/content-to-skill/<name>/skill/* <target_dir>/
    ```
 
-4. Verify installation:
+4. If installing to `library`, rebuild the index:
+   ```
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/library_index.ts
+   ```
+
+5. Verify installation:
    - Check SKILL.md exists at target
    - Check references/ directory exists
+   - If `library`: check book.json exists at target
 
-5. Write `result.json` to working directory:
+6. Write `result.json` to working directory:
    ```json
    {
      "status": "success",
      "skill_name": "<name>",
      "installed_to": "<target_dir>",
+     "install_type": "library|project|personal",
      "files_created": N,
      "chunks_processed": M,
      "working_directory": "/tmp/content-to-skill/<name>/"
    }
    ```
 
-6. Report success:
+7. Report success:
+
+   For `library` installs:
+   > Book "<name>" added to your library at `<target_dir>`.
+   >
+   > The book contains N reference files covering the key concepts.
+   > Use `/library <name>` to load it into any conversation.
+
+   For `project` or `personal` installs:
    > Skill "<name>" installed to `<target_dir>`.
    >
    > The skill contains N reference files covering the key concepts from the document.
    > Try it out by asking a question related to the book's content.
 
-7. Update `progress.json`:
+8. Update `progress.json`:
    ```json
-   { "step": "complete", "status": "complete", "installedTo": "<target_dir>" }
+   { "step": "complete", "status": "complete", "installedTo": "<target_dir>", "installType": "library|project|personal" }
    ```

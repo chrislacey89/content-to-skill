@@ -1,18 +1,44 @@
-#!/usr/bin/env node
+#!/usr/bin/env tsx
 
-const fs = require('fs');
-const path = require('path');
-const { PDFDocument } = require('pdf-lib');
-const JSZip = require('jszip');
-const { XMLParser } = require('fast-xml-parser');
-const { convert } = require('html-to-text');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { PDFDocument } from 'pdf-lib';
+import JSZip from 'jszip';
+import { XMLParser } from 'fast-xml-parser';
+import { convert } from 'html-to-text';
 
-function toArray(value) {
-  if (!value) return [];
+interface ChunkInfo {
+  name: string;
+  path: string;
+  pages?: string;
+  pageCount?: number;
+  sections?: string;
+  sectionCount?: number;
+}
+
+interface Manifest {
+  originalFile: string;
+  inputType: 'pdf' | 'epub';
+  totalPages?: number;
+  pagesPerChunk?: number;
+  totalSections?: number;
+  sectionsPerChunk?: number;
+  totalChunks: number;
+  chunks: Array<Omit<ChunkInfo, 'path'>>;
+}
+
+interface EpubSection {
+  sourcePath: string;
+  text: string;
+}
+
+export function toArray<T>(value: T | T[] | undefined | null): T[] {
+  if (value === null || value === undefined) return [];
   return Array.isArray(value) ? value : [value];
 }
 
-function normalizeText(text) {
+export function normalizeText(text: string | undefined | null): string {
   if (!text) return '';
   return text
     .replace(/\r\n/g, '\n')
@@ -24,7 +50,7 @@ function normalizeText(text) {
     .trim();
 }
 
-function resolveInputMeta(inputPath) {
+export function resolveInputMeta(inputPath: string): { ext: string; name: string } {
   const extWithCase = path.extname(inputPath);
   return {
     ext: extWithCase.toLowerCase(),
@@ -32,7 +58,7 @@ function resolveInputMeta(inputPath) {
   };
 }
 
-function ensureInputExists(inputPath) {
+function ensureInputExists(inputPath: string): void {
   if (!fs.existsSync(inputPath)) {
     throw new Error(`File not found: ${inputPath}`);
   }
@@ -41,19 +67,19 @@ function ensureInputExists(inputPath) {
   }
 }
 
-function ensureOutputDir(outputDir) {
+function ensureOutputDir(outputDir: string): void {
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 }
 
-function writeManifest(outputDir, manifest) {
+function writeManifest(outputDir: string, manifest: Manifest): string {
   const manifestPath = path.join(outputDir, 'manifest.json');
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
   return manifestPath;
 }
 
-function checkFileSize(inputPath) {
+function checkFileSize(inputPath: string): number {
   const stats = fs.statSync(inputPath);
   const fileSizeMB = stats.size / (1024 * 1024);
   if (fileSizeMB > 100) {
@@ -65,7 +91,7 @@ function checkFileSize(inputPath) {
   return fileSizeMB;
 }
 
-async function splitPdf(inputPath, pagesPerChunk = 5, outputDir = null) {
+async function splitPdf(inputPath: string, pagesPerChunk = 5, outputDir: string | null = null): Promise<Manifest> {
   ensureInputExists(inputPath);
   checkFileSize(inputPath);
 
@@ -84,7 +110,7 @@ async function splitPdf(inputPath, pagesPerChunk = 5, outputDir = null) {
   const totalChunks = Math.ceil(totalPages / pagesPerChunk);
   console.log(`Creating ${totalChunks} chunk(s)...\n`);
 
-  const chunkFiles = [];
+  const chunkFiles: ChunkInfo[] = [];
 
   for (let i = 0; i < totalChunks; i++) {
     const startPage = i * pagesPerChunk;
@@ -92,7 +118,7 @@ async function splitPdf(inputPath, pagesPerChunk = 5, outputDir = null) {
 
     const chunkPdf = await PDFDocument.create();
 
-    const pageIndices = [];
+    const pageIndices: number[] = [];
     for (let j = startPage; j < endPage; j++) {
       pageIndices.push(j);
     }
@@ -116,7 +142,7 @@ async function splitPdf(inputPath, pagesPerChunk = 5, outputDir = null) {
     console.log(`Created: ${chunkName} (pages ${startPage + 1}-${endPage})`);
   }
 
-  const manifest = {
+  const manifest: Manifest = {
     originalFile: path.basename(inputPath),
     inputType: 'pdf',
     totalPages,
@@ -133,7 +159,7 @@ async function splitPdf(inputPath, pagesPerChunk = 5, outputDir = null) {
   return manifest;
 }
 
-async function readZipTextFile(zip, filePath) {
+async function readZipTextFile(zip: JSZip, filePath: string): Promise<string | null> {
   const exact = zip.file(filePath);
   if (exact) return exact.async('text');
 
@@ -144,7 +170,7 @@ async function readZipTextFile(zip, filePath) {
   return null;
 }
 
-async function extractEpubSections(inputPath) {
+async function extractEpubSections(inputPath: string): Promise<EpubSection[]> {
   const epubBytes = fs.readFileSync(inputPath);
   const zip = await JSZip.loadAsync(epubBytes);
   const parser = new XMLParser({
@@ -177,7 +203,7 @@ async function extractEpubSections(inputPath) {
   const manifestItems = toArray(packageDoc?.manifest?.item);
   const spineItems = toArray(packageDoc?.spine?.itemref);
 
-  const manifestById = new Map();
+  const manifestById = new Map<string, { href: string; 'media-type'?: string }>();
   for (const item of manifestItems) {
     if (item?.id && item?.href) {
       manifestById.set(item.id, item);
@@ -187,7 +213,7 @@ async function extractEpubSections(inputPath) {
   const opfDirRaw = path.posix.dirname(rootfilePath);
   const opfDir = opfDirRaw === '.' ? '' : opfDirRaw;
 
-  const sections = [];
+  const sections: EpubSection[] = [];
   for (const itemRef of spineItems) {
     const idRef = itemRef?.idref;
     if (!idRef) continue;
@@ -219,10 +245,7 @@ async function extractEpubSections(inputPath) {
     );
 
     if (text) {
-      sections.push({
-        sourcePath: sectionPath,
-        text
-      });
+      sections.push({ sourcePath: sectionPath, text });
     }
   }
 
@@ -233,7 +256,7 @@ async function extractEpubSections(inputPath) {
   return sections;
 }
 
-async function splitEpub(inputPath, sectionsPerChunk = 5, outputDir = null) {
+async function splitEpub(inputPath: string, sectionsPerChunk = 5, outputDir: string | null = null): Promise<Manifest> {
   ensureInputExists(inputPath);
   checkFileSize(inputPath);
 
@@ -250,7 +273,7 @@ async function splitEpub(inputPath, sectionsPerChunk = 5, outputDir = null) {
   console.log(`Sections per chunk: ${sectionsPerChunk}`);
   console.log(`Creating ${totalChunks} chunk(s)...\n`);
 
-  const chunkFiles = [];
+  const chunkFiles: ChunkInfo[] = [];
   for (let i = 0; i < totalChunks; i++) {
     const startSection = i * sectionsPerChunk;
     const endSection = Math.min(startSection + sectionsPerChunk, totalSections);
@@ -279,7 +302,7 @@ async function splitEpub(inputPath, sectionsPerChunk = 5, outputDir = null) {
     );
   }
 
-  const manifest = {
+  const manifest: Manifest = {
     originalFile: path.basename(inputPath),
     inputType: 'epub',
     totalSections,
@@ -295,7 +318,7 @@ async function splitEpub(inputPath, sectionsPerChunk = 5, outputDir = null) {
   return manifest;
 }
 
-async function splitDocument(inputPath, unitsPerChunk = 5, outputDir = null) {
+async function splitDocument(inputPath: string, unitsPerChunk = 5, outputDir: string | null = null): Promise<Manifest> {
   const { ext } = resolveInputMeta(inputPath);
 
   if (ext === '.pdf') {
@@ -311,9 +334,9 @@ async function splitDocument(inputPath, unitsPerChunk = 5, outputDir = null) {
   );
 }
 
-function printUsage() {
+function printUsage(): void {
   console.log(`
-Usage: node chunk_document.js <input.pdf|input.epub> [options]
+Usage: tsx chunk_document.ts <input.pdf|input.epub> [options]
 
 Options:
   -p, --pages <n>     Pages/sections per chunk (default: 5)
@@ -321,14 +344,14 @@ Options:
   -h, --help          Show this help message
 
 Examples:
-  node chunk_document.js book.pdf
-  node chunk_document.js book.pdf -p 10
-  node chunk_document.js book.epub -p 8
-  node chunk_document.js book.pdf -p 5 -o ./chunks
+  tsx chunk_document.ts book.pdf
+  tsx chunk_document.ts book.pdf -p 10
+  tsx chunk_document.ts book.epub -p 8
+  tsx chunk_document.ts book.pdf -p 5 -o ./chunks
 `);
 }
 
-async function main() {
+async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
   if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
@@ -336,9 +359,9 @@ async function main() {
     process.exit(0);
   }
 
-  let inputPath = null;
+  let inputPath: string | null = null;
   let pagesPerChunk = 5;
-  let outputDir = null;
+  let outputDir: string | null = null;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -365,9 +388,12 @@ async function main() {
   try {
     await splitDocument(inputPath, pagesPerChunk, outputDir);
   } catch (error) {
-    console.error(`Error: ${error.message}`);
+    console.error(`Error: ${(error as Error).message}`);
     process.exit(1);
   }
 }
 
-main();
+// Only run when executed directly, not when imported
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main();
+}

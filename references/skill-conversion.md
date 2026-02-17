@@ -190,7 +190,47 @@ See [reference-name.md](references/reference-name.md) for [brief description]
 - Use tables and lists, not prose paragraphs — optimize for scannability
 - All linked reference files must exist
 
-## Step 4: Self-Verify
+## Step 4: Generate book.json
+
+Create a `book.json` metadata file for library indexing. This file enables the `/library` command to catalog and search books without reading each SKILL.md.
+
+### book.json Schema
+
+```json
+{
+  "name": "mom-test",
+  "title": "The Mom Test",
+  "author": "Rob Fitzpatrick",
+  "year": 2013,
+  "category": "business",
+  "tags": ["customer-discovery", "validation", "interviews"],
+  "description": "Customer conversation methodology for getting honest feedback without biasing responses.",
+  "referenceFiles": ["references/core-framework.md", "references/rules-of-thumb.md"]
+}
+```
+
+### Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Kebab-case skill name (matches directory name) |
+| `title` | Yes | Full book title |
+| `author` | No | Author name(s) |
+| `year` | No | Publication year (integer or null) |
+| `category` | No | Single category: `business`, `technical`, `self-help`, `health`, `science`, etc. |
+| `tags` | No | 3-7 kebab-case tags for search/filtering |
+| `description` | Yes | One-sentence description (reuse from SKILL.md frontmatter) |
+| `referenceFiles` | No | Array of relative paths to all reference files |
+
+### How to Generate
+
+1. Read `EXTRACTION_SUMMARY.md` for title, author, year, and category
+2. Reuse the `description` from the SKILL.md frontmatter
+3. List all files in the `references/` directory for `referenceFiles`
+4. Infer 3-7 tags from the book's key themes and terminology
+5. Write to `book.json` alongside SKILL.md
+
+## Step 5: Self-Verify
 
 After creating all files, verify:
 
@@ -200,5 +240,6 @@ After creating all files, verify:
 4. **Frontmatter is valid** — name matches directory name, description is present
 5. **Reference files have valid frontmatter** — title, impact, tags, chapter fields
 6. **Reference files are 40-200 lines each**
+7. **book.json is valid** — has required fields (name, title, description), referenceFiles matches actual files
 
 Fix any issues found before reporting completion.

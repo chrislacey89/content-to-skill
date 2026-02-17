@@ -1,10 +1,11 @@
 {
   "name": "content-to-skill",
   "version": "1.0.0",
-  "description": "Transform PDFs and EPUBs into Claude Code Agent Skills. Extracts, summarizes, and converts book content into structured skill packages with progressive disclosure.",
+  "description": "Transform PDFs and EPUBs into Claude Code Agent Skills with library management.",
   "author": {
     "name": "Christopher Lacey"
   },
   "license": "MIT",
-  "keywords": ["pdf", "epub", "skills", "knowledge", "extraction", "books"]
+  "repository": "https://github.com/chrislacey89/content-to-skill",
+  "keywords": ["pdf", "epub", "skills", "knowledge", "extraction", "books", "library"]
 }

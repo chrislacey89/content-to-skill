@@ -1,15 +1,25 @@
 {
   "name": "content-to-skill",
   "version": "1.0.0",
+  "type": "module",
   "description": "Document chunker for content-to-skill pipeline",
-  "main": "scripts/chunk_document.js",
+  "main": "scripts/chunk_document.ts",
   "scripts": {
-    "chunk": "node scripts/chunk_document.js"
+    "chunk": "npx tsx scripts/chunk_document.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration"
   },
   "dependencies": {
     "fast-xml-parser": "^5.3.5",
     "html-to-text": "^9.0.5",
     "jszip": "^3.10.1",
     "pdf-lib": "^1.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.0"
   }
 }
