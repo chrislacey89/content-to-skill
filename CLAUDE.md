@@ -24,6 +24,18 @@ scripts/library_index.ts      # Library index builder
 scripts/library_migrate.ts    # Skills-to-library migrator
 ```
 
+## Formatting
+
+This project uses [Biome](https://biomejs.dev/) for formatting and linting.
+
+```bash
+npm run check    # Format + lint + fix
+npm run format   # Format only
+npm run lint     # Lint only (no fixes)
+```
+
+Run `npm run check` before committing.
+
 ## Testing
 
 ```bash
