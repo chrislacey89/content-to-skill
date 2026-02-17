@@ -87,7 +87,7 @@ chapter: [chapter number or range]
 ## Key Quotes
 
 > "Direct quote from the book that captures this concept"
-> — Author Name
+> — Author Name, Chapter [N]
 
 [Include 2-4 memorable quotes]
 

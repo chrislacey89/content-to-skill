@@ -57,7 +57,7 @@ For each chunk, produce a markdown extraction following this structure:
 - [Another action item]
 
 ### Key Quotes
-> "[Exact quote]" (p. XX)
+> "[Exact quote]" (Chapter [N]: [Title])
 > Context: [why this quote matters]
 
 ### Data & Evidence
@@ -92,7 +92,7 @@ For images, charts, diagrams, and tables found in the chunk:
 1. Describe what the visual shows
 2. Extract all data points, labels, and relationships
 3. Explain the insight or argument the visual supports
-4. Note location: `[Figure X.X, p. XX]`
+4. Note location: `[Figure X.X, Chapter [N]]`
 
 ## Cross-Referencing Rules
 
@@ -140,6 +140,6 @@ The Mom Test is a set of rules for crafting questions that even your mom can't l
 - Keep conversations under 15 minutes to maintain focus
 
 ### Key Quotes
-> "The measure of usefulness of an early customer conversation is whether it gives us concrete facts about our customers' lives and world views." (p. 7)
+> "The measure of usefulness of an early customer conversation is whether it gives us concrete facts about our customers' lives and world views." (Chapter 1: The Mom Test)
 > Context: Defines the success metric for customer conversations — facts, not compliments.
 ```
