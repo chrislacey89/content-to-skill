@@ -1,7 +1,7 @@
 ---
 name: library
 description: "Browse and load book knowledge on demand. Use /library to list books, /library <name> to load one."
-argument-hint: "[<book-name>] [--search <topic>] [--migrate] [--rebuild-index]"
+argument-hint: "[<book-name>] [--search <topic>] [--migrate] [--rebuild-index] [--generate-covers]"
 allowed-tools: Read, Glob, Bash(npx:*), Bash(ls:*), Bash(mkdir:*), Bash(cp:*), Bash(rm:*)
 ---
 
@@ -19,6 +19,7 @@ Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the 
 | `--search <topic>` | (none) | Search books by topic, tags, or description |
 | `--migrate` | (none) | Migrate existing book-skills from `~/.claude/skills/` to the library |
 | `--rebuild-index` | (none) | Rebuild the library index from book.json files |
+| `--generate-covers` | (none) | Generate cover images for all books missing them |
 
 ## Mode: List All Books (`/library`)
 
@@ -53,9 +54,15 @@ When a book name is provided:
 2. If not found, report:
    > Book "<name>" not found in library. Use `/library` to see available books.
 
-3. If found, output the full SKILL.md content into the conversation so the model has the book's knowledge available.
+3. If found, check for a cover image and display it:
+   ```
+   Read ~/.claude/library/books/<name>/cover.png
+   ```
+   If the cover exists, it will display inline. If not, skip silently.
 
-4. Then report:
+4. Output the full SKILL.md content into the conversation so the model has the book's knowledge available.
+
+5. Then report:
    > Loaded **<title>** by <author>. Reference files are available at `~/.claude/library/books/<name>/references/`.
    >
    > Ask me anything about this book's concepts, or I'll apply its frameworks when relevant.
@@ -110,6 +117,16 @@ When a book name is provided:
    > - `<name>`: <title> by <author>
    >
    > Original skills remain in `~/.claude/skills/`. You can remove them manually once you've verified the migration.
+
+## Mode: Generate Covers (`/library --generate-covers`)
+
+1. Run the cover generation script:
+   ```
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/generate_covers.ts --all
+   ```
+
+2. Report the result:
+   > Generated cover images for N book(s).
 
 ## Mode: Rebuild Index (`/library --rebuild-index`)
 

@@ -20,6 +20,7 @@ interface BookJson {
   tags?: string[];
   description: string;
   referenceFiles?: string[];
+  coverImage?: string;
 }
 
 interface IndexEntry {
@@ -31,6 +32,7 @@ interface IndexEntry {
   tags: string[];
   description: string;
   referenceFiles: string[];
+  coverImage: string | null;
 }
 
 interface LibraryIndex {
@@ -91,7 +93,8 @@ function buildIndex(): LibraryIndex {
       category: book.category || null,
       tags: book.tags || [],
       description: book.description,
-      referenceFiles: book.referenceFiles || []
+      referenceFiles: book.referenceFiles || [],
+      coverImage: book.coverImage || null
     });
   }
 

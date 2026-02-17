@@ -232,7 +232,13 @@ Follow the instructions in `skill-conversion.md` to:
      ```
    - Infer `tags` from the book's key themes (3-7 kebab-case tags)
 
-5. **Self-verify**:
+5. **Generate cover image**:
+   ```
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/generate_covers.ts --name <name>
+   ```
+   This generates a programmatic cover at `/tmp/content-to-skill/<name>/skill/cover.png` and updates `book.json` with `"coverImage": "cover.png"`.
+
+6. **Self-verify**:
    - All reference files linked in SKILL.md exist
    - SKILL.md is under 500 lines
    - All relative paths are correct
@@ -240,7 +246,7 @@ Follow the instructions in `skill-conversion.md` to:
    - `book.json` has all required fields (name, title, description)
    - Fix any issues found
 
-6. Update `progress.json`:
+7. Update `progress.json`:
    ```json
    { "step": "installing", "status": "in_progress", ... }
    ```

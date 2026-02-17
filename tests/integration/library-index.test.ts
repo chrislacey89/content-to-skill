@@ -42,6 +42,7 @@ describe('library_index.ts', () => {
     expect(index.books[0].name).toBe('test-book');
     expect(index.books[0].title).toBe('Test Book Title');
     expect(index.books[0].description).toBe('A test book for validating library indexing.');
+    expect(index.books[0].coverImage).toBeNull();
   });
 
   it('skips incomplete book.json (missing required fields)', () => {

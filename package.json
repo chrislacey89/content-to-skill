@@ -16,6 +16,9 @@
     "jszip": "^3.10.1",
     "pdf-lib": "^1.17.1"
   },
+  "optionalDependencies": {
+    "@napi-rs/canvas": "^0.1.65"
+  },
   "devDependencies": {
     "@types/node": "^25.2.3",
     "tsx": "^4.21.0",
