@@ -198,13 +198,13 @@ Create a `book.json` metadata file for library indexing. This file enables the `
 
 ```json
 {
-  "name": "mom-test",
-  "title": "The Mom Test",
-  "author": "Rob Fitzpatrick",
-  "year": 2013,
+  "name": "the-prince",
+  "title": "The Prince",
+  "author": "Niccolo Machiavelli",
+  "year": 1532,
   "category": "business",
-  "tags": ["customer-discovery", "validation", "interviews"],
-  "description": "Customer conversation methodology for getting honest feedback without biasing responses.",
+  "tags": ["political-strategy", "leadership", "power-dynamics", "realpolitik"],
+  "description": "Machiavelli's political realism framework for power acquisition, retention, and leadership strategy.",
   "referenceFiles": ["references/core-framework.md", "references/rules-of-thumb.md"]
 }
 ```

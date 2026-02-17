@@ -52,7 +52,7 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
    - If not found or wrong type, report a clear error and stop
 3. Get the skill name:
    - If `--name` was provided, validate it: lowercase, alphanumeric + hyphens, max 64 chars, no leading/trailing/consecutive hyphens
-   - If not provided, ask the user: "What should this skill be called? (kebab-case, e.g., `outlive`, `mom-test`)"
+   - If not provided, ask the user: "What should this skill be called? (kebab-case, e.g., `outlive`, `the-prince`)"
 4. Create the working directory:
    ```
    mkdir -p /tmp/content-to-skill/<name>/chunks
