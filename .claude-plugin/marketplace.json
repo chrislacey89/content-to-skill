@@ -1,9 +1,19 @@
 {
+  "name": "content-to-skill",
+  "owner": {
+    "name": "Christopher Lacey",
+    "url": "https://github.com/chrislacey89"
+  },
   "plugins": [
     {
       "name": "content-to-skill",
-      "source": ".",
-      "description": "Transform PDFs and EPUBs into Claude Code Agent Skills"
+      "description": "Transform PDFs and EPUBs into Claude Code Agent Skills with library management.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Christopher Lacey"
+      },
+      "source": "./",
+      "homepage": "https://github.com/chrislacey89/content-to-skill"
     }
   ]
 }
