@@ -33,21 +33,21 @@ When no arguments are provided:
 2. If the file doesn't exist or is empty, report:
    > No books in your library yet. Use `/content-to-skill` to add books, or `/library --migrate` to import existing book-skills.
 
-3. If books exist, for each book that has a `coverImage` field (non-null), read the cover image file:
-   ```
-   Read ~/.claude/library/books/<name>/cover.png
-   ```
-   This will display the cover inline.
+3. If books exist, display each book as a card. For each book:
+   - Read the cover image (this renders it inline for the user):
+     ```
+     Read ~/.claude/library/books/<name>/cover.png
+     ```
+   - Immediately after the cover, display the book's details:
+     ```
+     **<title>** by <author> (`<name>`)
+     Category: <category> | Tags: <tags>
+     ```
+   - Add a blank line between each book card.
 
-4. Display a table with all books:
+   If a book has no `coverImage` field, display its details without a cover.
 
-   | # | Name | Title | Author | Category | Tags |
-   |---|------|-------|--------|----------|------|
-   | 1 | `mom-test` | The Mom Test | Rob Fitzpatrick | business | customer-discovery, validation |
-
-   Show each book's cover image directly above or beside its table entry. If a book has no cover, skip it silently.
-
-   Then add:
+   After all books, add:
    > Use `/library <name>` to load a book's knowledge into this conversation.
 
 ## Mode: Load a Book (`/library <name>`)
