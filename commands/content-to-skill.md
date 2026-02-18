@@ -41,7 +41,7 @@ Copy this checklist and update as you complete each step:
 
 If you have lost context (e.g., after compaction), reconstruct state by reading these files from the working directory:
 
-1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and batch you were on, and the `citationStyle` (`"chapter"` or `"page"`)
+1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and batch you were on, and the `citationStyle` (`"chapter"` or `"page"`). If `citationStyle` is missing and step is `"citation-style"`, resume at Step 1.5 to ask the user.
 2. Read `/tmp/content-to-skill/<name>/running-context.md` — the extraction state (built by Pass 2)
 3. Read `/tmp/content-to-skill/<name>/book-spine.md` — chapter summaries (built by Pass 2)
 4. Resume from the last completed batch or step
@@ -120,7 +120,9 @@ Store the contents of `research-prompt.md` in memory — you will inline it into
 1. Read `manifest.json` to get the total chunk count and file extension (`.pdf` or `.txt`)
 2. Group chunks into batches of 5 (e.g., chunks 1-5, 6-10, 11-15, ...)
 3. For each batch, spawn up to 5 subagents via `Task` in a **single message** (parallel execution)
-4. Each subagent uses `subagent_type: "general-purpose"` with this prompt template. Do NOT pass a `model` parameter — subagents inherit the parent model automatically:
+4. Each subagent uses `subagent_type: "general-purpose"` with this prompt template. Do NOT pass a `model` parameter — subagents inherit the parent model automatically.
+
+   **Before spawning**, replace `{citationStyle}` in the prompt below with the actual value from `progress.json` (`"chapter"` or `"page"`).
 
 ```
 You are extracting knowledge from a book chunk. Follow the methodology exactly.
@@ -138,11 +140,9 @@ You are extracting knowledge from a book chunk. Follow the methodology exactly.
 - Preserve exact quotes for definitional statements
 
 ## Citation Style
-Use **[chapter|page]** citations throughout your extraction (use the citationStyle value from progress.json):
+Use **{citationStyle}** citations throughout your extraction:
 - **chapter**: `(Chapter [N]: [Title])` for quotes, `## Chapter [N]: [Title]` for headers
 - **page**: `(p. [N])` for quotes, `## Section [N]: [Title]` for headers
-
-If the source text lacks the expected citation anchors (e.g., no real page numbers, or uses Book/Part/Canto divisions instead of numbered chapters), adapt to the source's own structure. Use the most specific locator the text provides (e.g., `(Book V, Ch. 3)`, `(Part II)`). Never cite PDF-viewer page numbers as real page numbers. Apply your adapted format consistently across the entire extraction.
 
 ## Extraction Methodology
 [full contents of research-prompt.md inlined here]
@@ -155,13 +155,15 @@ If the source text lacks the expected citation anchors (e.g., no real page numbe
 
 ### Pass 2 — Cross-Reference Enrichment
 
-After ALL chunks are extracted, spawn ONE subagent via `Task` with `subagent_type: "general-purpose"` (do NOT pass a `model` parameter):
+After ALL chunks are extracted, spawn ONE subagent via `Task` with `subagent_type: "general-purpose"` (do NOT pass a `model` parameter).
+
+**Before spawning**, replace `{citationStyle}` in the prompt below with the actual value from `progress.json` (`"chapter"` or `"page"`).
 
 ```
 You are cross-referencing extractions from a book to build a unified knowledge map.
 
 ## Citation Style
-Use **[chapter|page]** citations (use the citationStyle value from progress.json):
+Use **{citationStyle}** citations:
 - **chapter**: `(Ch. N)` — for books
 - **page**: `(p. N)` — for papers/whitepapers
 

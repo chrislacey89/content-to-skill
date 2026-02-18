@@ -23,7 +23,7 @@ Adjust your extraction focus based on the book type:
 - **Self-Help / Personal Development**: Behavioral frameworks, habit systems, mindset shifts, exercises. Capture the insight from anecdotes, not the full story.
 - **Technical / Programming**: Concepts, code patterns, architectural decisions, best practices, common pitfalls. Preserve code examples exactly. Note version-specific information.
 
-## Citation Format
+## Citation Style
 
 Use the citation style specified by the pipeline:
 
@@ -43,7 +43,6 @@ For each chunk, produce a markdown extraction following this structure:
 
 ```markdown
 ## Chapter [N]: [Chapter Title]
-<!-- For page citations, use: ## Section [N]: [Section Title] -->
 
 ### Chapter Summary
 [2-3 sentence overview of this chapter's contribution to the book's thesis]
@@ -73,7 +72,6 @@ For each chunk, produce a markdown extraction following this structure:
 
 ### Key Quotes
 > "[Exact quote]" (Chapter [N]: [Title])
-<!-- For page citations: > "[Exact quote]" (p. [N]) -->
 > Context: [why this quote matters]
 
 ### Data & Evidence
@@ -167,7 +165,7 @@ Given a chunk from an academic paper (pages 12-15):
 ```markdown
 ## Section 3: Methodology
 
-### Chapter Summary
+### Section Summary
 The authors introduce retrieval-augmented generation as a technique to ground LLM outputs in retrieved documents, reducing hallucination rates substantially compared to closed-book approaches.
 
 ### Key Concepts
