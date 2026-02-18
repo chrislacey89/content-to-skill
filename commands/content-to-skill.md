@@ -31,6 +31,7 @@ Copy this checklist and update as you complete each step:
 - [ ] Step 2: Chunk document
 - [ ] Step 3: Extract content (Pass 1 — per-chunk)
 - [ ] Step 4: Synthesize (Pass 2 — book-level)
+- [ ] Step 4b: Confirm category
 - [ ] Step 5: Convert to skill (includes book.json)
 - [ ] Step 6: Install skill
 ```
@@ -100,7 +101,7 @@ Store the contents of `research-prompt.md` in memory — you will inline it into
 1. Read `manifest.json` to get the total chunk count and file extension (`.pdf` or `.txt`)
 2. Group chunks into batches of 5 (e.g., chunks 1-5, 6-10, 11-15, ...)
 3. For each batch, spawn up to 5 subagents via `Task` in a **single message** (parallel execution)
-4. Each subagent uses `subagent_type: "general-purpose"` with this prompt template:
+4. Each subagent uses `subagent_type: "general-purpose"` with this prompt template. Do NOT pass a `model` parameter — subagents inherit the parent model automatically:
 
 ```
 You are extracting knowledge from a book chunk. Follow the methodology exactly.
@@ -128,7 +129,7 @@ You are extracting knowledge from a book chunk. Follow the methodology exactly.
 
 ### Pass 2 — Cross-Reference Enrichment
 
-After ALL chunks are extracted, spawn ONE subagent via `Task` with `subagent_type: "general-purpose"`:
+After ALL chunks are extracted, spawn ONE subagent via `Task` with `subagent_type: "general-purpose"` (do NOT pass a `model` parameter):
 
 ```
 You are cross-referencing extractions from a book to build a unified knowledge map.
@@ -182,7 +183,25 @@ Pass 2 already built `running-context.md`, `terminology.md`, and `book-spine.md`
 
 6. Update `progress.json`:
    ```json
-   { "step": "converting", "status": "in_progress", ... }
+   { "step": "confirming-category", "status": "in_progress", ... }
+   ```
+
+## Step 4b: Confirm Category
+
+1. Read `/tmp/content-to-skill/<name>/EXTRACTION_SUMMARY.md` and identify the inferred category from the book metadata section.
+
+2. Based on the book's themes, select 2-3 alternative categories that could plausibly fit. Known categories with themed cover colors: `business`, `health`, `ai`, `technology`, `psychology`, `science`, `finance`, `leadership`. Any freeform value is also valid.
+
+3. Present the user with a choice using `AskUserQuestion`:
+   - First option: the inferred category marked as "(Recommended)"
+   - Next 2-3 options: plausible alternatives based on the book's themes
+   - The user can always type a custom category via the built-in "Other" option
+
+4. Store the user's confirmed category for use in Step 5.
+
+5. Update `progress.json`:
+   ```json
+   { "step": "converting", "status": "in_progress", "confirmedCategory": "<category>", ... }
    ```
 
 ## Step 5: Convert to Skill
@@ -215,7 +234,8 @@ Follow the instructions in `skill-conversion.md` to:
    - Keep under 500 lines
 
 4. **Create book.json**:
-   - Read `/tmp/content-to-skill/<name>/EXTRACTION_SUMMARY.md` for metadata (title, author, year, category)
+   - Read `/tmp/content-to-skill/<name>/EXTRACTION_SUMMARY.md` for metadata (title, author, year)
+   - Use the **confirmed category from Step 4b** (do NOT re-infer)
    - Collect all reference filenames from `/tmp/content-to-skill/<name>/skill/references/`
    - Write `/tmp/content-to-skill/<name>/skill/book.json`:
      ```json
@@ -224,7 +244,7 @@ Follow the instructions in `skill-conversion.md` to:
        "title": "<Book Title>",
        "author": "<Author Name>",
        "year": <year or null>,
-       "category": "<category>",
+       "category": "<confirmed category from Step 4b>",
        "tags": ["<tag1>", "<tag2>", "..."],
        "description": "<One-sentence description from SKILL.md frontmatter>",
        "referenceFiles": ["references/core-framework.md", "..."]
