@@ -88,6 +88,7 @@ chapter: [chapter number or range]
 
 > "Direct quote from the book that captures this concept"
 > — Author Name, Chapter [N]
+<!-- For page citations: — Author Name, p. [N] -->
 
 [Include 2-4 memorable quotes]
 
@@ -203,6 +204,7 @@ Create a `book.json` metadata file for library indexing. This file enables the `
   "author": "Niccolo Machiavelli",
   "year": 1532,
   "category": "business",
+  "documentType": "book",
   "tags": ["political-strategy", "leadership", "power-dynamics", "realpolitik"],
   "description": "Machiavelli's political realism framework for power acquisition, retention, and leadership strategy.",
   "referenceFiles": ["references/core-framework.md", "references/rules-of-thumb.md"]
@@ -218,6 +220,7 @@ Create a `book.json` metadata file for library indexing. This file enables the `
 | `author` | No | Author name(s) |
 | `year` | No | Publication year (integer or null) |
 | `category` | No | Single category: `business`, `technical`, `self-help`, `health`, `science`, etc. |
+| `documentType` | No | `"book"` or `"paper"`. Defaults to `"book"`. Determines citation convention. |
 | `tags` | No | 3-7 kebab-case tags for search/filtering |
 | `description` | Yes | One-sentence description (reuse from SKILL.md frontmatter) |
 | `referenceFiles` | No | Array of relative paths to all reference files |

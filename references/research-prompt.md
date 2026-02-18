@@ -23,12 +23,22 @@ Adjust your extraction focus based on the book type:
 - **Self-Help / Personal Development**: Behavioral frameworks, habit systems, mindset shifts, exercises. Capture the insight from anecdotes, not the full story.
 - **Technical / Programming**: Concepts, code patterns, architectural decisions, best practices, common pitfalls. Preserve code examples exactly. Note version-specific information.
 
+## Citation Format
+
+Use the citation style specified by the pipeline:
+
+- **Chapter citations** (for books): `(Chapter [N]: [Title])` for quotes, `## Chapter [N]: [Title]` for section headers, `[Figure X.X, Chapter [N]]` for figures
+- **Page citations** (for papers/whitepapers): `(p. [N])` or `(pp. [N]-[M])` for ranges, `## Section [N]: [Title]` for section headers, `[Figure X.X, p. [N]]` for figures
+
+Apply the specified format consistently throughout.
+
 ## Output Schema
 
 For each chunk, produce a markdown extraction following this structure:
 
 ```markdown
 ## Chapter [N]: [Chapter Title]
+<!-- For page citations, use: ## Section [N]: [Section Title] -->
 
 ### Chapter Summary
 [2-3 sentence overview of this chapter's contribution to the book's thesis]
@@ -58,6 +68,7 @@ For each chunk, produce a markdown extraction following this structure:
 
 ### Key Quotes
 > "[Exact quote]" (Chapter [N]: [Title])
+<!-- For page citations: > "[Exact quote]" (p. [N]) -->
 > Context: [why this quote matters]
 
 ### Data & Evidence
@@ -92,7 +103,7 @@ For images, charts, diagrams, and tables found in the chunk:
 1. Describe what the visual shows
 2. Extract all data points, labels, and relationships
 3. Explain the insight or argument the visual supports
-4. Note location: `[Figure X.X, Chapter [N]]`
+4. Note location: `[Figure X.X, Chapter [N]]` (or `[Figure X.X, p. [N]]` for page citations)
 
 ## Cross-Referencing Rules
 
@@ -142,4 +153,31 @@ Machiavelli breaks from political philosophy tradition by insisting rulers must 
 ### Key Quotes
 > "There is such a gap between how people actually live and how they ought to live that anyone who declines to behave as people do, in order to behave as they should, is schooling himself for catastrophe." (Chapter 15: How Rulers Are Judged)
 > Context: The foundational statement of political realism — the gap between idealism and effective action.
+```
+
+## Few-Shot Example (Page Citations)
+
+Given a chunk from an academic paper (pages 12-15):
+
+```markdown
+## Section 3: Methodology
+
+### Chapter Summary
+The authors introduce retrieval-augmented generation as a technique to ground LLM outputs in retrieved documents, reducing hallucination rates substantially compared to closed-book approaches.
+
+### Key Concepts
+
+#### Retrieval-Augmented Generation
+- **Definition**: A technique that augments language model generation by first retrieving relevant documents from an external corpus, then conditioning generation on those documents.
+- **Why It Matters**: Reduces factual hallucination by providing grounded context from verified sources.
+- **How To Apply**: Index your document corpus with dense embeddings, retrieve top-k passages at inference time, prepend them to the prompt.
+- **Author's Example**: On the Natural Questions benchmark, RAG outperforms closed-book models by 15 points on exact match.
+
+### Key Quotes
+> "RAG reduces factual hallucination by 54% compared to closed-book generation." (p. 14)
+> Context: The central empirical finding supporting the paper's thesis.
+
+### Data & Evidence
+- 54% reduction in hallucination rate vs closed-book baseline (p. 14)
+- 15-point improvement on Natural Questions exact match (p. 13)
 ```

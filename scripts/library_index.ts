@@ -17,6 +17,7 @@ interface BookJson {
 	author?: string;
 	year?: number | null;
 	category?: string;
+	documentType?: "book" | "paper";
 	tags?: string[];
 	description: string;
 	referenceFiles?: string[];
@@ -29,6 +30,7 @@ interface IndexEntry {
 	author: string | null;
 	year: number | null;
 	category: string | null;
+	documentType: "book" | "paper";
 	tags: string[];
 	description: string;
 	referenceFiles: string[];
@@ -91,6 +93,7 @@ function buildIndex(): LibraryIndex {
 			author: book.author || null,
 			year: book.year || null,
 			category: book.category || null,
+			documentType: book.documentType || "book",
 			tags: book.tags || [],
 			description: book.description,
 			referenceFiles: book.referenceFiles || [],
