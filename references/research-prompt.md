@@ -30,7 +30,12 @@ Use the citation style specified by the pipeline:
 - **Chapter citations** (for books): `(Chapter [N]: [Title])` for quotes, `## Chapter [N]: [Title]` for section headers, `[Figure X.X, Chapter [N]]` for figures
 - **Page citations** (for papers/whitepapers): `(p. [N])` or `(pp. [N]-[M])` for ranges, `## Section [N]: [Title]` for section headers, `[Figure X.X, p. [N]]` for figures
 
-Apply the specified format consistently throughout.
+Apply the specified format consistently. If the source material does not contain the expected citation anchors (e.g., page-style was selected but the text has no meaningful page numbers, or chapter-style was selected but the text uses Book/Part/Canto divisions instead of numbered chapters):
+
+1. Adapt to the source's actual structure — use the most specific locator present in the text (Book V, Ch. 3 / Part II / Canto XII / Act III, Scene 2 / etc.)
+2. Keep the parenthetical format consistent: `(Book V, Ch. 3)` or `(Part II)` — always parenthetical, always referencing the text's own divisions
+3. Never cite PDF-viewer page numbers as if they were the source's page numbers — if the document is a plain-text rendering with no real pagination, use structural citations instead
+4. Apply the adapted format consistently across the entire extraction — do not mix styles
 
 ## Output Schema
 

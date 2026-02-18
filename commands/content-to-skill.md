@@ -74,8 +74,8 @@ Ask the user how quotes should be cited using `AskUserQuestion`:
 
 - **Question**: "How should quotes be cited in this skill?"
 - **Options**:
-  - "By chapter (e.g., Chapter 3)" — for books
-  - "By page number (e.g., p. 42)" — for papers, whitepapers, academic docs
+  - "By chapter (e.g., Chapter 3)" — for books, literature, and long-form works with structural divisions
+  - "By page number (e.g., p. 42)" — for papers, whitepapers, and paginated academic docs with stable page numbers
 
 Store the choice as `citationStyle` (`"chapter"` or `"page"`) and update `progress.json`:
 ```json
@@ -83,6 +83,8 @@ Store the choice as `citationStyle` (`"chapter"` or `"page"`) and update `progre
 ```
 
 Carry `citationStyle` forward in all subsequent `progress.json` updates.
+
+**Guidance**: If the source is a classic literary text (e.g., Project Gutenberg), a novel, or any work where page numbers are artifacts of digital rendering rather than the original publication, recommend "By chapter." The extraction agents will adapt to the source's actual structure (Book, Part, Canto, Act, etc.) if standard chapter numbers aren't present.
 
 ## Step 2: Chunk the Document
 
@@ -140,6 +142,8 @@ Use **[chapter|page]** citations throughout your extraction (use the citationSty
 - **chapter**: `(Chapter [N]: [Title])` for quotes, `## Chapter [N]: [Title]` for headers
 - **page**: `(p. [N])` for quotes, `## Section [N]: [Title]` for headers
 
+If the source text lacks the expected citation anchors (e.g., no real page numbers, or uses Book/Part/Canto divisions instead of numbered chapters), adapt to the source's own structure. Use the most specific locator the text provides (e.g., `(Book V, Ch. 3)`, `(Part II)`). Never cite PDF-viewer page numbers as real page numbers. Apply your adapted format consistently across the entire extraction.
+
 ## Extraction Methodology
 [full contents of research-prompt.md inlined here]
 ```
@@ -161,6 +165,8 @@ Use **[chapter|page]** citations (use the citationStyle value from progress.json
 - **chapter**: `(Ch. N)` — for books
 - **page**: `(p. N)` — for papers/whitepapers
 
+If the Pass 1 extractions used adapted citations (e.g., Book/Part/Canto references instead of chapter or page numbers), follow that same adapted format.
+
 ## Task
 1. Use Glob to find all extraction files: /tmp/content-to-skill/<name>/extraction-chunk-*.md
 2. Read each extraction file in order (chunk-001, chunk-002, etc.)
@@ -171,7 +177,7 @@ Use **[chapter|page]** citations (use the citationStyle value from progress.json
    ### Core Thesis
    [2-3 sentences capturing the book's central argument]
    ### Key Concepts (top 15)
-   - [Term]: [brief definition] (Ch. N or p. N per citation style)
+   - [Term]: [brief definition] (per citation style used in extractions)
    ### Unresolved Threads (max 5)
    - [Topic the author promised to address later]
    ### Recurring Themes (3-5)
