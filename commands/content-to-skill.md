@@ -28,6 +28,7 @@ Copy this checklist and update as you complete each step:
 
 ```
 - [ ] Step 1: Validate input and setup
+- [ ] Step 1.5: Choose citation style
 - [ ] Step 2: Chunk document
 - [ ] Step 3: Extract content (Pass 1 — per-chunk)
 - [ ] Step 4: Synthesize (Pass 2 — book-level)
@@ -40,7 +41,7 @@ Copy this checklist and update as you complete each step:
 
 If you have lost context (e.g., after compaction), reconstruct state by reading these files from the working directory:
 
-1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and batch you were on
+1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and batch you were on, and the `citationStyle` (`"chapter"` or `"page"`). If `citationStyle` is missing and step is `"citation-style"`, resume at Step 1.5 to ask the user.
 2. Read `/tmp/content-to-skill/<name>/running-context.md` — the extraction state (built by Pass 2)
 3. Read `/tmp/content-to-skill/<name>/book-spine.md` — chapter summaries (built by Pass 2)
 4. Resume from the last completed batch or step
@@ -64,8 +65,26 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
    ```
 6. Write initial `progress.json`:
    ```json
-   { "step": "chunking", "skillName": "<name>", "inputFile": "<path>", "status": "in_progress" }
+   { "step": "citation-style", "skillName": "<name>", "inputFile": "<path>", "status": "in_progress" }
    ```
+
+## Step 1.5: Choose Citation Style
+
+Ask the user how quotes should be cited using `AskUserQuestion`:
+
+- **Question**: "How should quotes be cited in this skill?"
+- **Options**:
+  - "By chapter (e.g., Chapter 3)" — for books, literature, and long-form works with structural divisions
+  - "By page number (e.g., p. 42)" — for papers, whitepapers, and paginated academic docs with stable page numbers
+
+Store the choice as `citationStyle` (`"chapter"` or `"page"`) and update `progress.json`:
+```json
+{ "step": "chunking", "skillName": "<name>", "inputFile": "<path>", "citationStyle": "chapter|page", "status": "in_progress" }
+```
+
+Carry `citationStyle` forward in all subsequent `progress.json` updates.
+
+**Guidance**: If the source is a classic literary text (e.g., Project Gutenberg), a novel, or any work where page numbers are artifacts of digital rendering rather than the original publication, recommend "By chapter." The extraction agents will adapt to the source's actual structure (Book, Part, Canto, Act, etc.) if standard chapter numbers aren't present.
 
 ## Step 2: Chunk the Document
 
@@ -84,7 +103,7 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
 
 4. Update `progress.json`:
    ```json
-   { "step": "extracting", "skillName": "<name>", "totalChunks": N, "totalBatches": B, "lastCompletedBatch": 0, "status": "in_progress" }
+   { "step": "extracting", "skillName": "<name>", "citationStyle": "chapter|page", "totalChunks": N, "totalBatches": B, "lastCompletedBatch": 0, "status": "in_progress" }
    ```
 
 ## Step 3: Extract Content (Parallel)
@@ -101,7 +120,9 @@ Store the contents of `research-prompt.md` in memory — you will inline it into
 1. Read `manifest.json` to get the total chunk count and file extension (`.pdf` or `.txt`)
 2. Group chunks into batches of 5 (e.g., chunks 1-5, 6-10, 11-15, ...)
 3. For each batch, spawn up to 5 subagents via `Task` in a **single message** (parallel execution)
-4. Each subagent uses `subagent_type: "general-purpose"` with this prompt template. Do NOT pass a `model` parameter — subagents inherit the parent model automatically:
+4. Each subagent uses `subagent_type: "general-purpose"` with this prompt template. Do NOT pass a `model` parameter — subagents inherit the parent model automatically.
+
+   **Before spawning**, replace `{citationStyle}` in the prompt below with the actual value from `progress.json` (`"chapter"` or `"page"`).
 
 ```
 You are extracting knowledge from a book chunk. Follow the methodology exactly.
@@ -118,6 +139,11 @@ You are extracting knowledge from a book chunk. Follow the methodology exactly.
 - If the chunk is unreadable, write an Extraction Error block and return "Chunk NNN: EXTRACTION ERROR"
 - Preserve exact quotes for definitional statements
 
+## Citation Style
+Use **{citationStyle}** citations throughout your extraction:
+- **chapter**: `(Chapter [N]: [Title])` for quotes, `## Chapter [N]: [Title]` for headers
+- **page**: `(p. [N])` for quotes, `## Section [N]: [Title]` for headers
+
 ## Extraction Methodology
 [full contents of research-prompt.md inlined here]
 ```
@@ -129,10 +155,19 @@ You are extracting knowledge from a book chunk. Follow the methodology exactly.
 
 ### Pass 2 — Cross-Reference Enrichment
 
-After ALL chunks are extracted, spawn ONE subagent via `Task` with `subagent_type: "general-purpose"` (do NOT pass a `model` parameter):
+After ALL chunks are extracted, spawn ONE subagent via `Task` with `subagent_type: "general-purpose"` (do NOT pass a `model` parameter).
+
+**Before spawning**, replace `{citationStyle}` in the prompt below with the actual value from `progress.json` (`"chapter"` or `"page"`).
 
 ```
 You are cross-referencing extractions from a book to build a unified knowledge map.
+
+## Citation Style
+Use **{citationStyle}** citations:
+- **chapter**: `(Ch. N)` — for books
+- **page**: `(p. N)` — for papers/whitepapers
+
+If the Pass 1 extractions used adapted citations (e.g., Book/Part/Canto references instead of chapter or page numbers), follow that same adapted format.
 
 ## Task
 1. Use Glob to find all extraction files: /tmp/content-to-skill/<name>/extraction-chunk-*.md
@@ -144,7 +179,7 @@ You are cross-referencing extractions from a book to build a unified knowledge m
    ### Core Thesis
    [2-3 sentences capturing the book's central argument]
    ### Key Concepts (top 15)
-   - [Term]: [brief definition] (Ch. N)
+   - [Term]: [brief definition] (per citation style used in extractions)
    ### Unresolved Threads (max 5)
    - [Topic the author promised to address later]
    ### Recurring Themes (3-5)
@@ -161,7 +196,7 @@ You are cross-referencing extractions from a book to build a unified knowledge m
 
 Wait for this subagent to complete, then report its summary and update `progress.json`:
 ```json
-{ "step": "synthesizing", "status": "in_progress", ... }
+{ "step": "synthesizing", "citationStyle": "chapter|page", "status": "in_progress", ... }
 ```
 
 ## Step 4: Synthesize
@@ -183,7 +218,7 @@ Pass 2 already built `running-context.md`, `terminology.md`, and `book-spine.md`
 
 6. Update `progress.json`:
    ```json
-   { "step": "confirming-category", "status": "in_progress", ... }
+   { "step": "confirming-category", "citationStyle": "chapter|page", "status": "in_progress", ... }
    ```
 
 ## Step 4b: Confirm Category
@@ -201,7 +236,7 @@ Pass 2 already built `running-context.md`, `terminology.md`, and `book-spine.md`
 
 5. Update `progress.json`:
    ```json
-   { "step": "converting", "status": "in_progress", "confirmedCategory": "<category>", ... }
+   { "step": "converting", "citationStyle": "chapter|page", "status": "in_progress", "confirmedCategory": "<category>", ... }
    ```
 
 ## Step 5: Convert to Skill
@@ -268,7 +303,7 @@ Follow the instructions in `skill-conversion.md` to:
 
 7. Update `progress.json`:
    ```json
-   { "step": "installing", "status": "in_progress", ... }
+   { "step": "installing", "citationStyle": "chapter|page", "status": "in_progress", ... }
    ```
 
 ## Step 6: Install Skill
