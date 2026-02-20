@@ -67,14 +67,14 @@ impact: [CRITICAL|HIGH|MEDIUM|LOW]
 tags: [tag1, tag2, tag3]
 chapter: [chapter number or range]
 ---
+## Key Principle
+
+[The core framework, technique, or insight — this is the heart of the reference]
 
 ## Problem This Solves
 
 [1-2 paragraphs: What situation or mistake does this address?]
 
-## Key Principle
-
-[The core framework, technique, or insight — this is the heart of the reference]
 
 ## Good Examples
 
