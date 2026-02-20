@@ -289,7 +289,7 @@ Follow the instructions in `skill-conversion.md` to:
 
 5. **Generate cover image**:
    ```
-   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/generate_covers.ts --name <name>
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/generate_covers.ts --dir /tmp/content-to-skill/<name>/skill
    ```
    This generates a programmatic cover at `/tmp/content-to-skill/<name>/skill/cover.png` and updates `book.json` with `"coverImage": "cover.png"`.
 

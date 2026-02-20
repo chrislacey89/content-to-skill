@@ -37,6 +37,7 @@ interface BookJson {
 interface GenerateOpts {
 	all: boolean;
 	name: string | null;
+	dir: string | null;
 	force: boolean;
 	help: boolean;
 }
@@ -44,13 +45,19 @@ interface GenerateOpts {
 function parseArgs(): GenerateOpts {
 	const args = process.argv.slice(2);
 	let name: string | null = null;
+	let dir: string | null = null;
 	const nameIdx = args.indexOf("--name");
 	if (nameIdx !== -1 && args[nameIdx + 1]) {
 		name = args[nameIdx + 1];
 	}
+	const dirIdx = args.indexOf("--dir");
+	if (dirIdx !== -1 && args[dirIdx + 1]) {
+		dir = args[dirIdx + 1];
+	}
 	return {
 		all: args.includes("--all"),
 		name,
+		dir,
 		force: args.includes("--force"),
 		help: args.includes("-h") || args.includes("--help"),
 	};
@@ -64,7 +71,8 @@ Generates programmatic book cover images for library books.
 
 Options:
   --all             Generate covers for all books missing them
-  --name <name>     Generate cover for a specific book
+  --name <name>     Generate cover for a specific book in the library
+  --dir <path>      Generate cover for a book.json in a custom directory
   --force           Regenerate even if cover already exists
   -h, --help        Show this help message
 `);
@@ -224,14 +232,18 @@ function updateBookJsonCover(bookDir: string): void {
 }
 
 async function run(opts: GenerateOpts): Promise<void> {
-	if (!fs.existsSync(BOOKS_DIR)) {
-		console.log("No library found at ~/.claude/library/books/");
-		return;
-	}
-
 	let bookDirs: string[] = [];
 
-	if (opts.name) {
+	if (opts.dir) {
+		if (!fs.existsSync(opts.dir)) {
+			console.error(`Directory "${opts.dir}" not found.`);
+			process.exit(1);
+		}
+		bookDirs = [opts.dir];
+	} else if (!fs.existsSync(BOOKS_DIR)) {
+		console.log("No library found at ~/.claude/library/books/");
+		return;
+	} else if (opts.name) {
 		const dir = path.join(BOOKS_DIR, opts.name);
 		if (!fs.existsSync(dir)) {
 			console.error(`Book "${opts.name}" not found in library.`);
@@ -242,7 +254,7 @@ async function run(opts: GenerateOpts): Promise<void> {
 		const entries = fs.readdirSync(BOOKS_DIR, { withFileTypes: true });
 		bookDirs = entries.filter((e) => e.isDirectory()).map((e) => path.join(BOOKS_DIR, e.name));
 	} else {
-		console.error("Specify --all or --name <name>. Use -h for help.");
+		console.error("Specify --all, --name <name>, or --dir <path>. Use -h for help.");
 		process.exit(1);
 	}
 
