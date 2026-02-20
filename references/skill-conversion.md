@@ -71,18 +71,18 @@ chapter: [chapter number or range]
 
 [The core framework, technique, or insight — this is the heart of the reference]
 
-## Problem This Solves
+## Why This Matters
 
-[1-2 paragraphs: What situation or mistake does this address?]
+[1-2 paragraphs: What situation, tension, or question does this address? For prescriptive books, describe the problem or mistake. For literary/philosophical works, describe the stakes — why this concept matters to the work and to the reader.]
 
 
 ## Good Examples
 
-[2-3 concrete examples of doing this RIGHT, with quotes from the book where available]
+[2-3 concrete illustrations of this principle in action. For prescriptive books: examples of doing this correctly. For literary works: key scenes, character actions, or narrative moments that embody the principle. For philosophy: thought experiments, demonstrations, or cases that make the argument concrete. Use quotes from the book where available.]
 
-## Bad Examples
+## Counterpoints
 
-[2-3 concrete examples of doing this WRONG, with quotes from the book where available]
+[2-3 examples that contrast with the key principle. For prescriptive books: common mistakes or antipatterns. For literary works: foil characters, opposing forces, or scenes that complicate the principle. For philosophy: counter-arguments or dialectical tensions. Use quotes from the book where available.]
 
 ## Key Quotes
 
