@@ -3,7 +3,7 @@ name: content-to-skill
 description: "Transforms PDFs and EPUBs into Claude Code Agent Skills by chunking, extracting, and converting document content into structured skill packages with progressive disclosure. Use when converting books or documents into reusable agent skills."
 argument-hint: "<path> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel]"
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Glob, Task, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*)
+allowed-tools: Read, Write, Edit, Glob, Task, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*)
 ---
 
 # Content to Skill
@@ -287,11 +287,17 @@ Follow the instructions in `skill-conversion.md` to:
      ```
    - Infer `tags` from the book's key themes (3-7 kebab-case tags)
 
-5. **Generate cover image**:
+5. **Fetch cover image**:
    ```
-   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/generate_covers.ts --dir /tmp/content-to-skill/<name>/skill
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_cover.ts --dir /tmp/content-to-skill/<name>/skill
    ```
-   This generates a programmatic cover at `/tmp/content-to-skill/<name>/skill/cover.png` and updates `book.json` with `"coverImage": "cover.png"`.
+   This tries to fetch a real HD cover from Open Library / Google Books, falling back to programmatic generation. Updates `book.json` with `"coverImage": "cover.png"` and `"coverSource": "<source>"`.
+
+   **If the output contains `HINT: Bookcover API failed`**: Automatically retry. The author name in book.json is likely missing diacritics or accents (e.g., "Niccolo" → "Niccolò"). Use your knowledge to determine the correct spelling with proper diacritics and immediately run:
+   ```
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_cover.ts --dir /tmp/content-to-skill/<name>/skill --author "Corrected Author Name" --force
+   ```
+   If the retry finds a Goodreads cover, it will automatically replace the previous one.
 
 6. **Self-verify**:
    - All reference files linked in SKILL.md exist

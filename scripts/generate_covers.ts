@@ -26,12 +26,13 @@ const DEFAULT_COLOR = "#374151";
 const COVER_WIDTH = 400;
 const COVER_HEIGHT = 600;
 
-interface BookJson {
+export interface BookJson {
 	name: string;
 	title: string;
 	author?: string;
 	category?: string;
 	coverImage?: string;
+	coverSource?: string;
 }
 
 interface GenerateOpts {
@@ -113,7 +114,7 @@ function wrapText(
 	return lines;
 }
 
-async function generateCover(bookDir: string, book: BookJson): Promise<string> {
+export async function generateCover(bookDir: string, book: BookJson): Promise<string> {
 	const { createCanvas } = await import("@napi-rs/canvas");
 	const canvas = createCanvas(COVER_WIDTH, COVER_HEIGHT);
 	const ctx = canvas.getContext("2d");
@@ -209,7 +210,7 @@ async function generateCover(bookDir: string, book: BookJson): Promise<string> {
 	return coverPath;
 }
 
-function loadBookJson(bookDir: string): BookJson | null {
+export function loadBookJson(bookDir: string): BookJson | null {
 	const bookJsonPath = path.join(bookDir, "book.json");
 	if (!fs.existsSync(bookJsonPath)) return null;
 	try {
@@ -219,12 +220,13 @@ function loadBookJson(bookDir: string): BookJson | null {
 	}
 }
 
-function updateBookJsonCover(bookDir: string): void {
+export function updateBookJsonCover(bookDir: string, source?: string): void {
 	const bookJsonPath = path.join(bookDir, "book.json");
 	if (!fs.existsSync(bookJsonPath)) return;
 	try {
 		const data = JSON.parse(fs.readFileSync(bookJsonPath, "utf8"));
 		data.coverImage = "cover.png";
+		if (source) data.coverSource = source;
 		fs.writeFileSync(bookJsonPath, `${JSON.stringify(data, null, 2)}\n`);
 	} catch {
 		console.warn(`WARNING: Could not update ${bookJsonPath}`);
