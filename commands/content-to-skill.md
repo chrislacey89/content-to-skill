@@ -34,6 +34,7 @@ Copy this checklist and update as you complete each step:
 - [ ] Step 4: Synthesize (Pass 2 — book-level)
 - [ ] Step 4b: Confirm category
 - [ ] Step 5: Convert to skill (includes book.json)
+- [ ] Step 5b: Fetch cover image
 - [ ] Step 6: Install skill
 ```
 
@@ -287,19 +288,7 @@ Follow the instructions in `skill-conversion.md` to:
      ```
    - Infer `tags` from the book's key themes (3-7 kebab-case tags)
 
-5. **Fetch cover image**:
-   ```
-   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_cover.ts --dir /tmp/content-to-skill/<name>/skill
-   ```
-   This tries to fetch a real HD cover from Open Library / Google Books, falling back to programmatic generation. Updates `book.json` with `"coverImage": "cover.png"` and `"coverSource": "<source>"`.
-
-   **If the output contains `HINT: Bookcover API failed`**: Automatically retry. The author name in book.json is likely missing diacritics or accents (e.g., "Niccolo" → "Niccolò"). Use your knowledge to determine the correct spelling with proper diacritics and immediately run:
-   ```
-   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_cover.ts --dir /tmp/content-to-skill/<name>/skill --author "Corrected Author Name" --force
-   ```
-   If the retry finds a Goodreads cover, it will automatically replace the previous one.
-
-6. **Self-verify**:
+5. **Self-verify**:
    - All reference files linked in SKILL.md exist
    - SKILL.md is under 500 lines
    - All relative paths are correct
@@ -307,7 +296,30 @@ Follow the instructions in `skill-conversion.md` to:
    - `book.json` has all required fields (name, title, description)
    - Fix any issues found
 
-7. Update `progress.json`:
+6. Update `progress.json`:
+   ```json
+   { "step": "fetching-cover", "citationStyle": "chapter|page", "status": "in_progress", ... }
+   ```
+
+## Step 5b: Fetch Cover Image
+
+1. Run the cover fetch script:
+   ```
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_cover.ts --dir /tmp/content-to-skill/<name>/skill
+   ```
+   This tries to fetch a real HD cover from Open Library / Google Books, falling back to programmatic generation. Updates `book.json` with `"coverImage": "cover.png"` and `"coverSource": "<source>"`.
+
+2. **If the output contains `HINT: Bookcover API failed`**: Automatically retry. The author name in book.json is likely missing diacritics or accents (e.g., "Niccolo" → "Niccolò"). Use your knowledge to determine the correct spelling with proper diacritics and immediately run:
+   ```
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_cover.ts --dir /tmp/content-to-skill/<name>/skill --author "Corrected Author Name" --force
+   ```
+   If the retry finds a Goodreads cover, it will automatically replace the previous one.
+
+3. Verify the cover was created:
+   - `cover.png` exists in `/tmp/content-to-skill/<name>/skill/`
+   - `book.json` contains `coverImage` and `coverSource` fields
+
+4. Update `progress.json`:
    ```json
    { "step": "installing", "citationStyle": "chapter|page", "status": "in_progress", ... }
    ```
