@@ -1,6 +1,6 @@
 {
   "name": "content-to-skill",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Transform PDFs and EPUBs into Claude Code Agent Skills with library management.",
   "author": {
     "name": "Christopher Lacey"
