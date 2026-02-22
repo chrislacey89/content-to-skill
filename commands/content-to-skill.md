@@ -28,10 +28,10 @@ Copy this checklist and update as you complete each step:
 
 ```
 - [ ] Step 1: Validate input and setup
-- [ ] Step 1.5: Choose citation style
+- [ ] Step 1.5: Choose citation style and genre
 - [ ] Step 2: Chunk document
-- [ ] Step 3: Extract content (Pass 1 — per-chunk)
-- [ ] Step 4: Synthesize (Pass 2 — book-level)
+- [ ] Step 3: Extract content (Pass 1 — per-chunk, Pass 2 — cross-reference, Pass 3 — distillation)
+- [ ] Step 4: Synthesize
 - [ ] Step 4b: Confirm category
 - [ ] Step 5: Convert to skill (includes book.json)
 - [ ] Step 5b: Fetch cover image
@@ -45,7 +45,8 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
 1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and batch you were on, and the `citationStyle` (`"chapter"` or `"page"`). If `citationStyle` is missing and step is `"citation-style"`, resume at Step 1.5 to ask the user.
 2. Read `/tmp/content-to-skill/<name>/running-context.md` — the extraction state (built by Pass 2)
 3. Read `/tmp/content-to-skill/<name>/book-spine.md` — chapter summaries (built by Pass 2)
-4. Resume from the last completed batch or step
+4. Check for `distilled-chunk-*.md` files — if present, Pass 3 has started or completed
+5. Resume from the last completed batch or step
 
 ## Step 1: Validate Input and Setup
 
@@ -69,21 +70,27 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
    { "step": "citation-style", "skillName": "<name>", "inputFile": "<path>", "status": "in_progress" }
    ```
 
-## Step 1.5: Choose Citation Style
+## Step 1.5: Choose Citation Style and Genre
 
-Ask the user how quotes should be cited using `AskUserQuestion`:
+Ask two questions using `AskUserQuestion`:
 
-- **Question**: "How should quotes be cited in this skill?"
-- **Options**:
-  - "By chapter (e.g., Chapter 3)" — for books, literature, and long-form works with structural divisions
-  - "By page number (e.g., p. 42)" — for papers, whitepapers, and paginated academic docs with stable page numbers
+**Question 1**: "How should quotes be cited in this skill?"
+- "By chapter (e.g., Chapter 3)" — for books, literature, and long-form works with structural divisions
+- "By page number (e.g., p. 42)" — for papers, whitepapers, and paginated academic docs with stable page numbers
 
-Store the choice as `citationStyle` (`"chapter"` or `"page"`) and update `progress.json`:
+**Question 2**: "What type of work is this?"
+- "Non-fiction (prescriptive)" — business, self-help, health, technical
+- "Literary fiction" — novels, short stories, narrative works
+- "Philosophy / essays" — argumentative or reflective non-fiction
+- "Poetry / drama" — verse, plays, performance texts
+- "Religious / spiritual" — scripture, theology, contemplative traditions
+
+Store the choices as `citationStyle` (`"chapter"` or `"page"`) and `genreType` (`"prescriptive"`, `"literary-fiction"`, `"philosophy"`, `"poetry-drama"`, or `"religious"`) and update `progress.json`:
 ```json
-{ "step": "chunking", "skillName": "<name>", "inputFile": "<path>", "citationStyle": "chapter|page", "status": "in_progress" }
+{ "step": "chunking", "skillName": "<name>", "inputFile": "<path>", "citationStyle": "chapter|page", "genreType": "<genreType>", "status": "in_progress" }
 ```
 
-Carry `citationStyle` forward in all subsequent `progress.json` updates.
+Carry both `citationStyle` and `genreType` forward in all subsequent `progress.json` updates.
 
 **Guidance**: If the source is a classic literary text (e.g., Project Gutenberg), a novel, or any work where page numbers are artifacts of digital rendering rather than the original publication, recommend "By chapter." The extraction agents will adapt to the source's actual structure (Book, Part, Canto, Act, etc.) if standard chapter numbers aren't present.
 
@@ -123,7 +130,7 @@ Store the contents of `research-prompt.md` in memory — you will inline it into
 3. For each batch, spawn up to 5 subagents via `Task` in a **single message** (parallel execution)
 4. Each subagent uses `subagent_type: "general-purpose"` with this prompt template. Do NOT pass a `model` parameter — subagents inherit the parent model automatically.
 
-   **Before spawning**, replace `{citationStyle}` in the prompt below with the actual value from `progress.json` (`"chapter"` or `"page"`).
+   **Before spawning**, replace `{citationStyle}` and `{genreType}` in the prompt below with the actual values from `progress.json`.
 
 ```
 You are extracting knowledge from a book chunk. Follow the methodology exactly.
@@ -144,6 +151,16 @@ You are extracting knowledge from a book chunk. Follow the methodology exactly.
 Use **{citationStyle}** citations throughout your extraction:
 - **chapter**: `(Chapter [N]: [Title])` for quotes, `## Chapter [N]: [Title]` for headers
 - **page**: `(p. [N])` for quotes, `## Section [N]: [Title]` for headers
+
+## Genre
+This work is **{genreType}**. Adjust your extraction accordingly:
+- For prescriptive works: focus on mechanisms, causal chains, and implementation reasoning
+- For literary fiction: extract the argument embedded in the narrative — what characters represent, why events happen, thematic dialectics
+- For philosophy/essays: preserve the argumentative chain — which claim supports which, strongest objections, logical structure
+- For poetry/drama: track formal techniques, imagery patterns, and how scenes build argumentative or emotional momentum
+- For religious/spiritual: core doctrines, contemplative practices, tensions between claims and lived experience
+
+See the "Genre Reinterpretation" section in the methodology for how to adapt extraction priorities.
 
 ## Extraction Methodology
 [full contents of research-prompt.md inlined here]
@@ -197,6 +214,52 @@ If the Pass 1 extractions used adapted citations (e.g., Book/Part/Canto referenc
 
 Wait for this subagent to complete, then report its summary and update `progress.json`:
 ```json
+{ "step": "distilling", "citationStyle": "chapter|page", "status": "in_progress", ... }
+```
+
+### Pass 3 — Distillation (batches of 5)
+
+Holiday's notecard principle: after reading the whole book and seeing its structure, go back through each extraction and ask "what actually matters?" Only insights that survive this filter make it into the final skill.
+
+1. Read `/tmp/content-to-skill/<name>/running-context.md` and `/tmp/content-to-skill/<name>/book-spine.md` — capture their full contents
+2. Group chunks into batches of 5 (same batching as Pass 1)
+3. For each batch, spawn up to 5 subagents via `Task` in a **single message** (parallel execution)
+4. Each subagent uses `subagent_type: "general-purpose"` (do NOT pass a `model` parameter)
+
+```
+You are distilling a raw book extraction. You have already seen the whole book's
+structure — now go back and ask: what in this chunk is genuinely insightful?
+
+## Context (Whole Book)
+[contents of running-context.md]
+
+## Book Structure
+[contents of book-spine.md]
+
+## Task
+1. Read: /tmp/content-to-skill/<name>/extraction-chunk-NNN.md
+2. For each concept and framework in the extraction, evaluate:
+   - Does this reveal a causal chain or mechanism? (Keep and deepen)
+   - Does this just restate what the author said without explaining *why*? (Rewrite with causal reasoning)
+   - Is this a surface observation that seemed important in isolation but is redundant given the whole book? (Cut or compress)
+   - Does this connect to the book's core thesis in a way the per-chunk extraction missed? (Add the connection)
+3. Write the distilled extraction to: /tmp/content-to-skill/<name>/distilled-chunk-NNN.md
+4. Return: "Chunk NNN: [kept X of Y concepts, deepened Z, cut W]"
+
+## Hard Constraints
+- Never add content not supported by the original extraction or source material
+- The distilled version should be SHORTER than the original — depth over breadth
+- Every concept that survives must answer "why does this matter?" and "what goes wrong without it?"
+- Preserve all citations from the original
+```
+
+5. Wait for the batch to complete, then:
+   - Report progress: "Distillation batch B/T complete (chunks X-Y). Summaries: [list one-line summaries]"
+   - Update `progress.json` with `lastCompletedDistillBatch: B`
+6. Repeat for the next batch until all chunks are distilled
+
+After all distillation batches are complete, update `progress.json`:
+```json
 { "step": "synthesizing", "citationStyle": "chapter|page", "status": "in_progress", ... }
 ```
 
@@ -226,10 +289,17 @@ Pass 2 already built `running-context.md`, `terminology.md`, and `book-spine.md`
 
 1. Read `/tmp/content-to-skill/<name>/EXTRACTION_SUMMARY.md` and identify the inferred category from the book metadata section.
 
-2. Based on the book's themes, select 2-3 alternative categories that could plausibly fit. Known categories with themed cover colors: `business`, `health`, `ai`, `technology`, `psychology`, `science`, `finance`, `leadership`. Any freeform value is also valid.
+2. Use the `genreType` from `progress.json` to inform your category recommendation. Genre-to-category mappings:
+   - `prescriptive` → infer from content (business, health, self-help, technical, etc.)
+   - `literary-fiction` → `literature`
+   - `philosophy` → `philosophy`
+   - `poetry-drama` → `literature`
+   - `religious` → `religion`
 
-3. Present the user with a choice using `AskUserQuestion`:
-   - First option: the inferred category marked as "(Recommended)"
+3. Based on the book's themes, select 2-3 alternative categories that could plausibly fit. Known categories with themed cover colors: `business`, `health`, `ai`, `technology`, `psychology`, `science`, `finance`, `leadership`, `literature`, `philosophy`, `religion`. Any freeform value is also valid.
+
+4. Present the user with a choice using `AskUserQuestion`:
+   - First option: the genre-informed category marked as "(Recommended)"
    - Next 2-3 options: plausible alternatives based on the book's themes
    - The user can always type a custom category via the built-in "Other" option
 
@@ -258,7 +328,7 @@ Follow the instructions in `skill-conversion.md` to:
    ```
 
 2. **Create reference files** in batches of 3-4:
-   - For each file in the plan, read the relevant `extraction-chunk-NNN.md` files
+   - For each file in the plan, read the relevant `distilled-chunk-NNN.md` files (these are the Pass 3 outputs — prefer over raw `extraction-chunk-NNN.md`)
    - Write each reference file to `/tmp/content-to-skill/<name>/skill/references/<filename>`
    - Follow the reference file template from `skill-conversion.md`
 

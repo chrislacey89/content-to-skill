@@ -32,6 +32,7 @@ Read `EXTRACTION_SUMMARY.md` and plan 8-15 reference files. For each, identify:
 3. Always include:
    - A `core-framework.md` for the book's main thesis
    - A `rules-of-thumb.md` for collected heuristics
+   - For prescriptive books (business, health, self-help, technical, whitepapers): an `implementation-playbook.md` covering how to put the book's advice into practice — action sequences, prioritization, adherence strategies, and common execution pitfalls. Skip this for literary fiction, poetry, plays, and philosophy where "implementation" doesn't apply.
 4. Impact levels:
    - **CRITICAL**: Core framework, must-know concepts
    - **HIGH**: Important techniques, common mistakes
@@ -69,27 +70,27 @@ chapter: [chapter number or range]
 ---
 ## Key Principle
 
-[The core framework, technique, or insight — this is the heart of the reference]
+[The core framework, technique, or insight — this is the heart of the reference. Any direct quotes used here must include their citation: (Chapter [N]) or (p. [N]).]
 
 ## Why This Matters
 
-[1-2 paragraphs: What situation, tension, or question does this address? For prescriptive books, describe the problem or mistake. For literary/philosophical works, describe the stakes — why this concept matters to the work and to the reader.]
+[1-2 paragraphs: What situation, tension, or question does this address? For prescriptive books, describe the problem or mistake. For literary/philosophical works, describe the stakes — why this concept matters to the work and to the reader. Be concrete: name the competing forces, the failure mode, or the unresolved contradiction. Show what's at stake.]
 
 
 ## Good Examples
 
-[2-3 concrete illustrations of this principle in action. For prescriptive books: examples of doing this correctly. For literary works: key scenes, character actions, or narrative moments that embody the principle. For philosophy: thought experiments, demonstrations, or cases that make the argument concrete. Use quotes from the book where available.]
+[2-3 concrete illustrations of this principle in action. For prescriptive books: examples of doing this correctly. For literary works: key scenes, character actions, or narrative moments that embody the principle. For philosophy: thought experiments, demonstrations, or cases that make the argument concrete. Use quotes from the book where available — always with their chapter or page citation.]
 
 ## Counterpoints
 
-[2-3 examples that contrast with the key principle. For prescriptive books: common mistakes or antipatterns. For literary works: foil characters, opposing forces, or scenes that complicate the principle. For philosophy: counter-arguments or dialectical tensions. Use quotes from the book where available.]
+[2-3 examples that contrast with the key principle. For prescriptive books: common mistakes or antipatterns. For literary works: foil characters, opposing forces, or scenes that complicate the principle. For philosophy: counter-arguments or dialectical tensions. Show what goes wrong, what complicates, or what the strongest objection is — with specific examples. Use quotes from the book where available — always with their chapter or page citation.]
 
 ## Key Quotes
 
 > "Direct quote from the book that captures this concept"
-> — Author Name, Chapter [N]
+> — Author Name, Chapter [N] (or p. [N] for page-cited works)
 
-[Include 2-4 memorable quotes]
+[Include 2-4 memorable quotes. EVERY quote MUST include a chapter number, page number, or structural locator (Part, Act, Book, etc.) matching the skill's citation style. Never include a quote without its source location.]
 
 ## Rules of Thumb
 
@@ -108,6 +109,7 @@ chapter: [chapter number or range]
 - Preserve the author's voice and terminology
 - Be specific: include concrete examples, not abstract advice
 - Never fabricate content not in the source extraction
+- Every direct quote (text in quotation marks attributed to the author) must include a citation — chapter number, page number, or structural locator. No exceptions.
 
 ## Step 3: Create SKILL.md
 
@@ -137,7 +139,7 @@ description: "[One-sentence description of when to use this skill.]"
 
 ### The Key Insight
 > "[The single most important quote from the book]"
-> — Author Name
+> — Author Name, Chapter [N] (or p. [N])
 
 ---
 
@@ -241,5 +243,6 @@ After creating all files, verify:
 5. **Reference files have valid frontmatter** — title, impact, tags, chapter fields
 6. **Reference files are 40-200 lines each**
 7. **book.json is valid** — has required fields (name, title, description), referenceFiles matches actual files
+8. **All quotes have citations** — every `> "..."` block and inline `"..."` quote attributed to the author includes a chapter, page, or structural reference
 
 Fix any issues found before reporting completion.

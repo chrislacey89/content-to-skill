@@ -1,2 +1,7 @@
 node_modules/
 .cache/
+
+# Site build artifacts
+site/node_modules/
+site/dist/
+site/.astro/

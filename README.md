@@ -71,6 +71,21 @@ Browse and load book knowledge.
 3. **Synthesize** -- Cross-references extractions into a unified knowledge map
 4. **Convert** -- Produces a structured skill with progressive disclosure and 8-15 reference files
 
+## Resource Usage
+
+Converting a book is a multi-step, agent-heavy process. Expect significant token usage and wall-clock time depending on book length and the model you choose.
+
+**Example benchmark** -- *The Software Engineer's Guidebook* (OCR PDF, ~400 pages):
+
+| Metric | Value |
+|--------|-------|
+| Wall time | ~42 minutes |
+| Input tokens | ~21k |
+| Output tokens | ~280k |
+| Cost (Opus) | ~$25 |
+
+The biggest factor in cost is your model choice. Running on Sonnet instead of Opus will be significantly cheaper for similar results. Shorter documents and fewer pages-per-chunk (`--pages`) will also reduce usage.
+
 ## Requirements
 
 - Node.js 18+
