@@ -13,22 +13,25 @@ export const hero = {
 	title: "Content to Skill",
 	tagline: "Your books, as agent skills",
 	description:
-		"A Claude Code plugin that transforms any PDF or EPUB into a structured skill your agent can load on demand.",
+		"Turn any book into structured knowledge your AI assistant can use — whenever you need it.",
 };
 
 export const problem = {
 	heading: "The Knowledge Decay Problem",
 	text: "You read a great technical book. Two weeks later, you remember the gist but none of the specifics. When you need it most — debugging a system, choosing an architecture, writing a feature — the knowledge is gone. Your AI agent has never read it at all.",
 	solution:
-		"Content-to-Skill doesn't summarize — it distills. A 3-pass extraction pipeline adapts to each book's genre, cross-references every chapter, and produces 8–15 reference files with progressive disclosure: a 30-second overview, a situational index, and deep concept dives. The result lives in your personal library, loadable on demand.",
+		"Content-to-Skill doesn't summarize — it distills. The result is a personal skill your agent can load on demand: a 30-second overview, a situational index for the right concept at the right time, and deep reference dives when you need the full picture.",
 };
+
+export const pipelineIntro =
+	"A multi-pass extraction pipeline adapts to each book's genre, cross-references every chapter, and produces 8–15 structured reference files.";
 
 export const pipeline = [
 	{
 		step: 1,
 		name: "Chunk",
 		description:
-			"Splits your PDF or EPUB into sections sized for parallel processing",
+			"Splits your PDF or EPUB into sections sized for processing",
 	},
 	{
 		step: 2,
@@ -40,7 +43,7 @@ export const pipeline = [
 		step: 3,
 		name: "Extract",
 		description:
-			"Up to 5 subagents process chunks in parallel, pulling frameworks, patterns, and evidence",
+			"Multiple AI readers work through sections simultaneously, pulling out key ideas, frameworks, and examples",
 	},
 	{
 		step: 4,
@@ -58,7 +61,7 @@ export const pipeline = [
 		step: 6,
 		name: "Convert",
 		description:
-			"8–15 reference files with progressive disclosure: 30-second overview, situational index, deep concept dives",
+			"A complete knowledge base with layered detail: 30-second overview, situational index, deep concept dives",
 	},
 	{
 		step: 7,
@@ -75,6 +78,7 @@ export const pipeline = [
 ];
 
 export const install = {
+	intro: "Content-to-Skill runs inside Claude Code, Anthropic's AI coding assistant. If you already have it installed, you're two commands away.",
 	prerequisites: ["Claude Code", "Node.js 18+"],
 	commands: [
 		{
@@ -106,8 +110,52 @@ export const benchmark = {
 	book: "The Software Engineer's Guidebook",
 	pages: "~400",
 	time: "~42 minutes",
-	inputTokens: "~21k",
-	outputTokens: "~280k",
 	cost: "~$25 (Opus)",
-	output: "Complete skill with 8–15 reference files",
+	output: "A complete knowledge base from a single book",
+	costNote:
+		"Cost scales roughly with page count. Shorter books cost proportionally less. Using Sonnet instead of Opus reduces cost by approximately 80%.",
+};
+
+export const output = {
+	book: "The Software Engineer's Guidebook",
+	overview: `## Level 1: 30-Second Reference
+
+### The Core Framework
+- Engineering careers reward intentional growth across
+  technical, organizational, and business dimensions
+- At every level, "getting things done" — consistently
+  shipping impactful work — is the universal currency
+- The ratio of technical-to-organizational work shifts
+  as you advance: juniors ship tasks, seniors ship
+  independently, staff+ ensure organizations ship
+- Career ownership is non-negotiable: maintain work logs,
+  pace yourself, and make contributions visible
+
+### Quick Lookup
+
+| Situation             | Do This                    |
+|-----------------------|----------------------------|
+| Preparing for promo   | Produce → Organize → Pub   |
+| Feeling burned out    | Switch to Coasting mode    |
+| Starting new company  | Cost center or profit?     |
+| Architecture decision | One-way or two-way door?   |
+| Shipping to prod      | Staged rollouts + flags    |`,
+	index: `## Level 2: Situational Index
+
+### "I need to..."
+
+| Goal                            | Reference                 |
+|---------------------------------|---------------------------|
+| Understand the career arc       | core-framework.md         |
+| Ship more effectively           | getting-things-done.md    |
+| Write better, readable code     | coding-and-quality.md     |
+| Design a testing strategy       | testing-strategies.md     |
+| Make architecture decisions     | software-architecture.md  |
+| Lead a project as tech lead     | tech-lead-project-mgmt.md |
+| Build reliable systems          | reliability-operations.md |`,
+};
+
+export const author = {
+	name: "Chris Lacey",
+	github: "https://github.com/chrislacey89",
 };
