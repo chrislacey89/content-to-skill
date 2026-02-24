@@ -13,18 +13,18 @@ export const hero = {
 	title: "Content to Skill",
 	tagline: "Your books, as agent skills",
 	description:
-		"Turn any book into structured knowledge your AI assistant can use — whenever you need it.",
+		"Turn any book into structured knowledge your AI assistant can use, whenever you need it.",
 };
 
 export const problem = {
 	heading: "The Knowledge Decay Problem",
-	text: "You read a great technical book. Two weeks later, you remember the gist but none of the specifics. When you need it most — debugging a system, choosing an architecture, writing a feature — the knowledge is gone. Your AI agent has never read it at all.",
+	text: "You read a great technical book. Two weeks later, you remember the gist but none of the specifics. When you need it most, debugging a system, choosing an architecture, writing a feature, the knowledge is gone. Your AI agent has never read it at all.",
 	solution:
-		"Content-to-Skill doesn't summarize — it distills. The result is a personal skill your agent can load on demand: a 30-second overview, a situational index for the right concept at the right time, and deep reference dives when you need the full picture.",
+		"Content-to-Skill doesn't summarize. It distills. The result is a personal skill your agent can load on demand: a 30-second overview, a situational index for the right concept at the right time, and deep reference dives when you need the full picture.",
 };
 
 export const pipelineIntro =
-	"A multi-pass extraction pipeline adapts to each book's genre, cross-references every chapter, and produces 8–15 structured reference files.";
+	"A multi-pass extraction pipeline adapts to each book's genre, cross-references every chapter, and produces 8-15 structured reference files.";
 
 export const pipeline = [
 	{
@@ -37,7 +37,7 @@ export const pipeline = [
 		step: 2,
 		name: "Configure",
 		description:
-			"You choose citation style and genre — extraction adapts to the book's form",
+			"You choose citation style and genre. Extraction adapts to the book's form",
 	},
 	{
 		step: 3,
@@ -55,7 +55,7 @@ export const pipeline = [
 		step: 5,
 		name: "Distill",
 		description:
-			"Each chunk is re-evaluated against the whole book — surface observations are cut, causal chains deepened",
+			"Each chunk is re-evaluated against the whole book. Surface observations are cut, causal chains deepened",
 	},
 	{
 		step: 6,
@@ -73,7 +73,7 @@ export const pipeline = [
 		step: 8,
 		name: "Install",
 		description:
-			"Adds to your personal library — browse with /library, load on demand with /library <name>",
+			"Adds to your personal library. Browse with /library, load on demand with /library <name>",
 	},
 ];
 
@@ -123,8 +123,8 @@ export const output = {
 ### The Core Framework
 - Engineering careers reward intentional growth across
   technical, organizational, and business dimensions
-- At every level, "getting things done" — consistently
-  shipping impactful work — is the universal currency
+- At every level, "getting things done", consistently
+  shipping impactful work, is the universal currency
 - The ratio of technical-to-organizational work shifts
   as you advance: juniors ship tasks, seniors ship
   independently, staff+ ensure organizations ship
