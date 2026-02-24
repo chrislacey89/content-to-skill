@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+/* Base reset for all designs */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: rgb(50, 50, 50) rgb(18, 18, 18);
+}
+
+::-webkit-scrollbar {
+	width: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: rgb(18, 18, 18);
+}
+
+::-webkit-scrollbar-thumb {
+	background: rgb(50, 50, 50);
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: rgb(80, 80, 80);
+}
+
+/* Smooth scroll */
+html {
+	scroll-behavior: smooth;
+}
+
+/* Copy button feedback */
+.copy-btn.copied {
+	color: #4ade80 !important;
+}
+
+/* Fade-in animation */
+@keyframes fadeInUp {
+	from {
+		opacity: 0;
+		transform: translateY(24px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.fade-in {
+	animation: fadeInUp 0.6s ease-out both;
+}
+
+.fade-in-delay-1 { animation-delay: 0.1s; }
+.fade-in-delay-2 { animation-delay: 0.2s; }
+.fade-in-delay-3 { animation-delay: 0.3s; }
+.fade-in-delay-4 { animation-delay: 0.4s; }
+.fade-in-delay-5 { animation-delay: 0.5s; }
+.fade-in-delay-6 { animation-delay: 0.6s; }
+
+/* Pipeline flow */
+.pipeline-flow {
+	position: relative;
+}
+
+.pipeline-line {
+	transform-origin: top;
+}
+
+.pipeline-pulse {
+	z-index: 2;
+	pointer-events: none;
+}
+
+.pipeline-node {
+	z-index: 1;
+}
+
+.pipeline-node-inner {
+	transform: scale(0);
+}
+
+/* Reduce motion: show everything immediately, skip animations */
+@media (prefers-reduced-motion: reduce) {
+	.pipeline-step {
+		opacity: 1 !important;
+		transform: none !important;
+	}
+	.pipeline-line {
+		opacity: 1 !important;
+		transform: scaleY(1) !important;
+	}
+	.pipeline-pulse {
+		display: none;
+	}
+	.pipeline-node-inner {
+		opacity: 1 !important;
+		transform: scale(1) !important;
+	}
+	.pipeline-node {
+		border-color: #c2532d !important;
+	}
+}
