@@ -2,7 +2,7 @@
 name: library
 description: "Browse and load book knowledge on demand. Use /library to list books, /library <name> to load one."
 argument-hint: "[<book-name>] [--search <topic>] [--migrate] [--rebuild-index] [--generate-covers]"
-allowed-tools: Read, Glob, Bash(npx:*), Bash(ls:*), Bash(mkdir:*), Bash(cp:*), Bash(rm:*)
+allowed-tools: Read, Glob, Bash(npx:*), Bash(ls:*), Bash(mkdir:*), Bash(cp:*), Bash(rm:*), Bash(echo:*)
 ---
 
 # Library
@@ -25,18 +25,30 @@ Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the 
 
 When no arguments are provided:
 
-1. Read the library index:
+1. **MANDATORY FIRST STEP — resolve the library path.** Do NOT call Read yet. Run this bash command first:
    ```
-   Read ~/.claude/library/index.json
+   echo "${CLAUDE_LIBRARY_DIR:-$([ -f "$HOME/.claude/library/index.json" ] && echo "$HOME/.claude/library" || ([ -f "$(pwd)/.claude/library/index.json" ] && echo "$(pwd)/.claude/library" || echo "NOT_FOUND"))}"
+   ```
+   This outputs one absolute path or `NOT_FOUND`. Save the output as `LIB` for all subsequent steps.
+
+   If the output is `NOT_FOUND`, report this and stop:
+   > Library not found. Checked `~/.claude/library/` and `.claude/library/` (project-relative).
+   >
+   > **Cowork users:** Authorize a folder containing `.claude/library/`, or set `CLAUDE_LIBRARY_DIR`.
+   > **Local users:** Run `/content-to-skill` to add your first book, or `/library --migrate` to import existing book-skills.
+
+2. Now read the library index using the resolved path from step 1:
+   ```
+   Read {LIB}/index.json
    ```
 
-2. If the file doesn't exist or is empty, report:
+3. If the file doesn't exist or is empty, report:
    > No books in your library yet. Use `/content-to-skill` to add books, or `/library --migrate` to import existing book-skills.
 
-3. If books exist, display each book as a card. For each book:
+4. If books exist, display each book as a card. For each book:
    - Read the cover image (this renders it inline for the user):
      ```
-     Read ~/.claude/library/books/<name>/cover.png
+     Read {LIB}/books/<name>/cover.png
      ```
    - Immediately after the cover, display the book's details:
      ```
@@ -54,46 +66,58 @@ When no arguments are provided:
 
 When a book name is provided:
 
-1. Read the book's SKILL.md:
+1. **MANDATORY FIRST STEP — resolve the library path.** Do NOT call Read yet. Run this bash command first:
    ```
-   Read ~/.claude/library/books/<name>/SKILL.md
+   echo "${CLAUDE_LIBRARY_DIR:-$([ -f "$HOME/.claude/library/index.json" ] && echo "$HOME/.claude/library" || ([ -f "$(pwd)/.claude/library/index.json" ] && echo "$(pwd)/.claude/library" || echo "NOT_FOUND"))}"
+   ```
+   Save the output as `LIB`. If `NOT_FOUND`, report the error (same as List mode) and stop.
+
+2. Read the book's SKILL.md:
+   ```
+   Read {LIB}/books/<name>/SKILL.md
    ```
 
-2. If not found, report:
+3. If not found, report:
    > Book "<name>" not found in library. Use `/library` to see available books.
 
-3. If found, check for a cover image and display it:
+4. If found, check for a cover image and display it:
    ```
-   Read ~/.claude/library/books/<name>/cover.png
+   Read {LIB}/books/<name>/cover.png
    ```
    If the cover exists, it will display inline. If not, skip silently.
 
-4. Output the full SKILL.md content into the conversation so the model has the book's knowledge available.
+5. Output the full SKILL.md content into the conversation so the model has the book's knowledge available.
 
-5. Then report:
-   > Loaded **<title>** by <author>. Reference files are available at `~/.claude/library/books/<name>/references/`.
+6. Then report:
+   > Loaded **<title>** by <author>. Reference files are available at `{LIB}/books/<name>/references/`.
    >
    > Ask me anything about this book's concepts, or I'll apply its frameworks when relevant.
 
 ## Mode: Search (`/library --search <topic>`)
 
-1. Read the library index:
+1. **MANDATORY FIRST STEP — resolve the library path.** Do NOT call Read yet. Run this bash command first:
    ```
-   Read ~/.claude/library/index.json
+   echo "${CLAUDE_LIBRARY_DIR:-$([ -f "$HOME/.claude/library/index.json" ] && echo "$HOME/.claude/library" || ([ -f "$(pwd)/.claude/library/index.json" ] && echo "$(pwd)/.claude/library" || echo "NOT_FOUND"))}"
+   ```
+   Save the output as `LIB`. If `NOT_FOUND`, report the error (same as List mode) and stop.
+
+2. Read the library index:
+   ```
+   Read {LIB}/index.json
    ```
 
-2. If the index is empty or missing, report no books available.
+3. If the index is empty or missing, report no books available.
 
-3. Match the search query against each book's:
+4. Match the search query against each book's:
    - `title`
    - `description`
    - `tags` array
    - `category`
    - `name`
 
-4. Display matching books as a table (same format as list mode), sorted by relevance.
+5. Display matching books as a table (same format as list mode), sorted by relevance.
 
-5. If no matches, suggest:
+6. If no matches, suggest:
    > No books matched "<topic>". Use `/library` to see all available books.
 
 ## Mode: Migrate (`/library --migrate`)
@@ -105,22 +129,28 @@ When a book name is provided:
 
 2. The script will:
    - Scan `~/.claude/skills/` for directories containing a `references/` subdirectory
-   - Copy each matching skill to `~/.claude/library/books/<name>/`
+   - Copy each matching skill to the library books directory
    - Generate a minimal `book.json` from SKILL.md frontmatter
    - Rebuild the library index
 
-3. After migration completes, review each migrated book's `book.json` and fill in any placeholder fields:
-   - Read each `~/.claude/library/books/<name>/book.json`
+3. After migration completes, resolve the library path:
+   ```
+   echo "${CLAUDE_LIBRARY_DIR:-$([ -f "$HOME/.claude/library/index.json" ] && echo "$HOME/.claude/library" || ([ -f "$(pwd)/.claude/library/index.json" ] && echo "$(pwd)/.claude/library" || echo "NOT_FOUND"))}"
+   ```
+   Save the output as `LIB`.
+
+4. Review each migrated book's `book.json` and fill in any placeholder fields:
+   - Read each `{LIB}/books/<name>/book.json`
    - Read the corresponding `SKILL.md` to infer missing metadata
    - Update `title`, `author`, `year`, `category`, and `tags` if they are placeholders
    - Write updated `book.json`
 
-4. Rebuild the index:
+5. Rebuild the index:
    ```
    npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/library_index.ts
    ```
 
-5. Report results:
+6. Report results:
    > Migrated N book(s) to the library:
    > - `<name>`: <title> by <author>
    >

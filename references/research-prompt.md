@@ -15,25 +15,58 @@ Extract insight, not summary. For every concept, ask *why it matters* and *what 
 7. Specific data, statistics, or research citations
 8. Connections to other works or thinkers
 
-### Genre Reinterpretation
+## Genre-Specific Extraction Strategies
 
-For non-prescriptive works (fiction, philosophy, poetry, religious texts), reinterpret the priorities above:
-- "Core thesis" → the work's central question or dialectic
-- "Frameworks and models" → structural patterns, recurring motifs, argumentative architecture
-- "Key insights" → thematic propositions, interpretive claims
-- "Counter-arguments" → competing positions within the text, dialectical tensions
+The extraction priorities above are the baseline — optimized for prescriptive nonfiction. Different genres require fundamentally different strategies, not just relabeled terminology. Use the genre type set by the pipeline to select the appropriate strategy below.
 
-## Book Categories
+### Prescriptive (business, self-help, health, technical)
 
-Adjust your extraction focus based on the book type:
+This is the baseline the extraction priorities were designed for. No reinterpretation needed.
 
-- **Business**: Frameworks, case studies, mental models, strategic principles. Authors often coin terminology — preserve it exactly. Trace the causal chain — why does this framework work, and what breaks when companies ignore it?
-- **Self-Help / Personal Development**: Behavioral frameworks, habit systems, mindset shifts, exercises. Capture the insight from anecdotes, not the full story. Capture the mechanism behind the advice, not just the advice itself.
-- **Technical / Programming**: Concepts, code patterns, architectural decisions, best practices, common pitfalls. Preserve code examples exactly. Note version-specific information.
-- **Literary Fiction**: Extract the argument embedded in the plot, not the plot itself. Identify what each character *represents* in the novel's dialectic. Track why things happen, not just what happens.
-- **Philosophy**: Central arguments, logical structure, thought experiments, strongest objections. Preserve the argumentative chain — which claim supports which.
-- **Poetry / Drama**: Formal techniques, imagery patterns, the relationship between form and meaning. How scenes build argumentative or emotional momentum.
-- **Religious / Spiritual**: Core doctrines, contemplative practices, tensions between theological claims and lived experience.
+- **What to extract**: Frameworks, mechanisms, causal chains, implementation reasoning. Authors often coin terminology — preserve it exactly.
+- **How to handle structure**: Extract as portable, self-contained insight chunks. Each concept should stand alone.
+- **What "mechanism" means**: The causal chain — why the author's recommendation works, what breaks when you ignore it, what tradeoffs they acknowledge.
+- **What to preserve**: The reasoning behind the advice, not just the advice itself. For every concept, answer: "what goes wrong without this?"
+
+### Literary Fiction
+
+The Holiday notecard method (extract portable wisdom, file by theme) actively flattens literature. A novel's structure IS its argument — extracting "key takeaways" misses the point. Use a fundamentally different approach.
+
+- **What to extract**: The novel's *architectural argument* — how its structure embodies meaning. Track character-as-philosophy: what each character represents in the work's dialectic, and how their *fate* tests their philosophical position. Extract embodied counterarguments — scenes where the strongest opposing view is shown sympathetically, not just mentioned.
+- **How to handle structure**: The sequence matters. Do not atomize into portable chunks. Track how the work builds, complicates, and (often deliberately) refuses to resolve its central tensions.
+- **What "mechanism" means**: How does the narrative *demonstrate* a truth through lived consequence? Not "how do you implement this" but "how does the story show this playing out in a human life?"
+- **What to preserve that other genres would cut**: Dialectical tensions and irresolution — do NOT resolve what the author leaves unresolved. Preserve the novel's method of argument (embodiment, consequence, irony) alongside its conclusions. If something resists being reduced to a notecard, that resistance is a signal it captures something important.
+- **Key question**: "What does this work DO that cannot be reduced to a statement?"
+
+### Philosophy / Essays
+
+Philosophy sits between prescriptive and literary extraction. Frameworks and heuristics extract well (like prescriptive), but the argumentative sequence is load-bearing (like literature). Losing the sequence loses the philosophy.
+
+- **What to extract**: Central arguments and their logical structure. The author's treatment of rejected alternatives — these are often where the real insight lives, because the reasons for rejection reveal the author's actual commitments. Thought experiments and demonstrations that make abstract claims concrete.
+- **How to handle structure**: Preserve the argumentative chain — which claim supports which, what the strongest objection is, and how the author handles it. The *sequence* of the argument matters, not just the conclusions.
+- **What "mechanism" means**: The logical structure connecting premises to conclusions. How the author moves from observation to claim to implication.
+- **What to preserve that other genres would cut**: Rhetorical movement — the path the argument takes, including detours that seem tangential but establish necessary groundwork. The author's engagement with the strongest version of opposing views.
+- **Key question**: "Why does the author reject the alternatives, and how honest is that rejection?"
+
+### Poetry / Drama
+
+Poetry is already maximally compressed. The extraction should illuminate, not reduce. Form and content are inseparable — describing a poem's "key insight" without its formal technique is like describing a song's lyrics without its melody.
+
+- **What to extract**: Formal techniques alongside thematic content — always together, never separated. Imagery patterns and their development across the work. How scenes or stanzas build argumentative or emotional momentum.
+- **How to handle structure**: Track how the work *moves* — its rhythm of tension and release, its accumulation of imagery and meaning. Do not break into portable chunks.
+- **What "mechanism" means**: How form creates meaning — meter, line breaks, staging, silence, repetition. The technique IS the insight.
+- **What to preserve that other genres would cut**: Almost everything. Extract less, describe more. Show how formal choices produce meaning rather than summarizing what the meaning is.
+- **Key question**: "Does this show how form creates meaning, or does it just paraphrase content?"
+
+### Religious / Spiritual
+
+Religious texts contain both extractable doctrine (which works like prescriptive frameworks) and experiential testimony (which works like literature). The extraction must handle both modes and preserve the tension between them.
+
+- **What to extract**: Core doctrines extract well — treat them like prescriptive frameworks with structure and logical relationships. Contemplative practices need experiential description — describe what the practice *produces* in the practitioner, not just the steps. Track how the text moves between declarative teaching and experiential testimony.
+- **How to handle structure**: Doctrinal content can be chunked portably. Experiential and narrative content should preserve sequence and context.
+- **What "mechanism" means**: For doctrines, the logical or theological structure connecting claims. For practices, the phenomenological description — what happens internally when someone does this.
+- **What to preserve that other genres would cut**: The tension between theological claims and lived experience. The gap between what a tradition teaches and what practitioners report is often where the deepest insight lives.
+- **Key question**: "Does this preserve the tension between doctrine and lived experience, or does it flatten one into the other?"
 
 ## Citation Style
 

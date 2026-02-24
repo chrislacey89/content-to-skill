@@ -1,7 +1,7 @@
 ---
 name: content-to-skill
 description: "Transforms PDFs and EPUBs into Claude Code Agent Skills by chunking, extracting, and converting document content into structured skill packages with progressive disclosure. Use when converting books or documents into reusable agent skills."
-argument-hint: "<path> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel]"
+argument-hint: "<path> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel] [--citation chapter|page] [--genre prescriptive|literary-fiction|philosophy|poetry-drama|religious] [--category <category>]"
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Glob, Task, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*)
 ---
@@ -21,6 +21,9 @@ Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the 
 | `--install <location>` | `library` | `library`, `project`, or `personal` |
 | `--on-conflict <action>` | `overwrite` | `overwrite` or `cancel` |
 | `--pages <n>` | `5` | Pages/sections per chunk |
+| `--citation <style>` | (prompt user) | `chapter` or `page` — skip citation style prompt |
+| `--genre <type>` | (prompt user) | `prescriptive`, `literary-fiction`, `philosophy`, `poetry-drama`, or `religious` — skip genre prompt |
+| `--category <category>` | (prompt user) | Book category for library (e.g., `business`, `philosophy`, `literature`) — skip category confirmation |
 
 ## Pipeline Progress Checklist
 
@@ -65,14 +68,29 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
    ```
    npm --prefix ${CLAUDE_PLUGIN_ROOT} ls 2>/dev/null || npm install --prefix ${CLAUDE_PLUGIN_ROOT}
    ```
-6. Write initial `progress.json`:
-   ```json
-   { "step": "citation-style", "skillName": "<name>", "inputFile": "<path>", "status": "in_progress" }
-   ```
+6. Parse optional `--citation`, `--genre`, and `--category` flags:
+   - If `--citation` provided, validate it is `chapter` or `page`
+   - If `--genre` provided, validate it is one of: `prescriptive`, `literary-fiction`, `philosophy`, `poetry-drama`, `religious`
+   - If `--category` provided, store it for use in Step 4b (any non-empty string is valid)
+   - If both `--citation` and `--genre` are provided, skip Step 1.5 entirely
+   - If `--category` is provided, skip Step 4b entirely
+
+7. Write initial `progress.json`:
+   - If both `--citation` and `--genre` are provided:
+     ```json
+     { "step": "chunking", "skillName": "<name>", "inputFile": "<path>", "citationStyle": "<chapter|page>", "genreType": "<genre>", "status": "in_progress" }
+     ```
+   - Otherwise:
+     ```json
+     { "step": "citation-style", "skillName": "<name>", "inputFile": "<path>", "status": "in_progress" }
+     ```
+   - If `--category` was provided, also include `"confirmedCategory": "<category>"` in the JSON
 
 ## Step 1.5: Choose Citation Style and Genre
 
-Ask two questions using `AskUserQuestion`:
+**Skip this step entirely if both `--citation` and `--genre` were provided** (values already written to `progress.json` in Step 1). Proceed directly to Step 2.
+
+Otherwise, ask the remaining question(s) using `AskUserQuestion`:
 
 **Question 1**: "How should quotes be cited in this skill?"
 - "By chapter (e.g., Chapter 3)" — for books, literature, and long-form works with structural divisions
@@ -160,7 +178,7 @@ This work is **{genreType}**. Adjust your extraction accordingly:
 - For poetry/drama: track formal techniques, imagery patterns, and how scenes build argumentative or emotional momentum
 - For religious/spiritual: core doctrines, contemplative practices, tensions between claims and lived experience
 
-See the "Genre Reinterpretation" section in the methodology for how to adapt extraction priorities.
+See the "Genre-Specific Extraction Strategies" section in the methodology for the full extraction strategy for this genre.
 
 ## Extraction Methodology
 [full contents of research-prompt.md inlined here]
@@ -219,12 +237,15 @@ Wait for this subagent to complete, then report its summary and update `progress
 
 ### Pass 3 — Distillation (batches of 5)
 
-Holiday's notecard principle: after reading the whole book and seeing its structure, go back through each extraction and ask "what actually matters?" Only insights that survive this filter make it into the final skill.
+After reading the whole book and seeing its structure, go back through each extraction and ask "what actually matters?" The distillation criteria differ by genre — prescriptive works use Holiday's notecard filter, while other genres use filters appropriate to their form.
 
 1. Read `/tmp/content-to-skill/<name>/running-context.md` and `/tmp/content-to-skill/<name>/book-spine.md` — capture their full contents
-2. Group chunks into batches of 5 (same batching as Pass 1)
-3. For each batch, spawn up to 5 subagents via `Task` in a **single message** (parallel execution)
-4. Each subagent uses `subagent_type: "general-purpose"` (do NOT pass a `model` parameter)
+2. Read `genreType` from `/tmp/content-to-skill/<name>/progress.json`
+3. Group chunks into batches of 5 (same batching as Pass 1)
+4. For each batch, spawn up to 5 subagents via `Task` in a **single message** (parallel execution)
+5. Each subagent uses `subagent_type: "general-purpose"` (do NOT pass a `model` parameter)
+
+**Before spawning**, substitute `{genreType}` and `{GENRE_DISTILLATION_CRITERIA}` in the prompt below. Select the criteria block matching `genreType` from the genre criteria table that follows the template.
 
 ```
 You are distilling a raw book extraction. You have already seen the whole book's
@@ -236,21 +257,74 @@ structure — now go back and ask: what in this chunk is genuinely insightful?
 ## Book Structure
 [contents of book-spine.md]
 
+## Genre: {genreType}
+
 ## Task
 1. Read: /tmp/content-to-skill/<name>/extraction-chunk-NNN.md
-2. For each concept and framework in the extraction, evaluate:
-   - Does this reveal a causal chain or mechanism? (Keep and deepen)
-   - Does this just restate what the author said without explaining *why*? (Rewrite with causal reasoning)
-   - Is this a surface observation that seemed important in isolation but is redundant given the whole book? (Cut or compress)
-   - Does this connect to the book's core thesis in a way the per-chunk extraction missed? (Add the connection)
+2. For each concept and framework in the extraction, evaluate using these genre-specific criteria:
+
+{GENRE_DISTILLATION_CRITERIA}
+
 3. Write the distilled extraction to: /tmp/content-to-skill/<name>/distilled-chunk-NNN.md
 4. Return: "Chunk NNN: [kept X of Y concepts, deepened Z, cut W]"
 
 ## Hard Constraints
 - Never add content not supported by the original extraction or source material
 - The distilled version should be SHORTER than the original — depth over breadth
-- Every concept that survives must answer "why does this matter?" and "what goes wrong without it?"
 - Preserve all citations from the original
+```
+
+#### Genre Distillation Criteria
+
+Select the block matching the `genreType` from `progress.json` and substitute it into `{GENRE_DISTILLATION_CRITERIA}` above.
+
+**prescriptive**:
+```
+- Does this reveal a causal chain or mechanism? → Keep and deepen
+- Does this just restate what the author said without explaining *why*? → Rewrite with causal reasoning
+- Is this a surface observation that seemed important in isolation but is redundant given the whole book? → Cut or compress
+- Does this connect to the book's core thesis in a way the per-chunk extraction missed? → Add the connection
+- Every concept that survives must answer "why does this matter?" and "what goes wrong without it?"
+```
+
+**literary-fiction**:
+```
+- Does this capture what the work *does* (structural argument, embodied philosophy) or just what it *contains* (plot summary, theme statements)? → Keep architecture, cut summary
+- Does this preserve dialectical tension or prematurely resolve it? → Keep tensions alive; do NOT tidy up what the author left unresolved
+- Does this show how a character's fate tests their philosophical position? → Keep and deepen
+- Is this a portable wisdom nugget that could go on a notecard, or does it require the novel's context to mean anything? → If the latter, that's a sign it captures something important — keep it, but ensure enough context is provided
+- Does this reveal the novel's method of argument (embodiment, consequence, irresolution) rather than just its conclusions? → Keep and deepen
+- Every concept that survives must show what the work DOES, not just what it contains
+```
+
+**philosophy**:
+```
+- Does this preserve the argumentative sequence, or just the conclusion? → If just the conclusion, rewrite to include the argumentative path
+- Does this capture why the author rejected alternatives? → Keep — rejected alternatives are often where the real insight lives
+- Is this a framework that extracts cleanly, or an argument that depends on its rhetorical context? → Both are valid; ensure enough context is provided for the latter
+- Does this show the author's honest engagement with the strongest objection? → Keep and deepen
+- Is this redundant given the whole book's argumentative arc? → Cut or compress, but preserve the logical connections
+- Every concept that survives must show the argument's movement, not just its destination
+```
+
+**poetry-drama**:
+```
+- Does this connect form to meaning? → Keep
+- Does this track how imagery or motif develops across the work? → Keep and deepen
+- Would cutting this lose the sense of how the work *moves*? → Keep
+- Does this describe formal technique alongside thematic content, or just paraphrase content? → If just paraphrase, rewrite to include formal analysis
+- Almost nothing should be cut for redundancy — poetry and drama are already compressed
+- Every concept that survives must show how form creates meaning
+```
+
+**religious**:
+```
+- For doctrinal content: apply the prescriptive filters (causal chain, mechanism, redundancy)
+- For experiential content: apply the literary filters (embodiment, tension, lived consequence)
+- Does this preserve the tension between doctrine and lived experience? → Keep
+- Does this describe what a practice *produces* in the practitioner, not just what it prescribes? → Keep and deepen
+- Does this flatten experiential testimony into abstract doctrine? → Rewrite to restore the experiential dimension
+- Every concept that survives must preserve the tension between what is taught and what is lived
 ```
 
 5. Wait for the batch to complete, then:
@@ -286,6 +360,10 @@ Pass 2 already built `running-context.md`, `terminology.md`, and `book-spine.md`
    ```
 
 ## Step 4b: Confirm Category
+
+**If `confirmedCategory` already exists in `progress.json`** (from the `--category` flag), skip this step. Update `progress.json` with `"step": "converting"` and proceed directly to Step 5.
+
+Otherwise:
 
 1. Read `/tmp/content-to-skill/<name>/EXTRACTION_SUMMARY.md` and identify the inferred category from the book metadata section.
 

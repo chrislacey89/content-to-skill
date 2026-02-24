@@ -2,14 +2,14 @@
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveBooksDir } from "./resolve-library.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const BOOKS_DIR = path.join(os.homedir(), ".claude", "library", "books");
+const BOOKS_DIR = resolveBooksDir();
 
 const CATEGORY_COLORS: Record<string, string> = {
 	business: "#1A56DB",

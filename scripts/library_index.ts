@@ -1,12 +1,12 @@
 #!/usr/bin/env tsx
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveBooksDir, resolveLibraryDir } from "./resolve-library.js";
 
-const LIBRARY_DIR = path.join(os.homedir(), ".claude", "library");
-const BOOKS_DIR = path.join(LIBRARY_DIR, "books");
+const LIBRARY_DIR = resolveLibraryDir();
+const BOOKS_DIR = resolveBooksDir();
 const INDEX_PATH = path.join(LIBRARY_DIR, "index.json");
 
 const REQUIRED_FIELDS = ["name", "title", "description"] as const;

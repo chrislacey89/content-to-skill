@@ -5,13 +5,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveBooksDir } from "./resolve-library.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const HOME = os.homedir();
-const SKILLS_DIR = path.join(HOME, ".claude", "skills");
-const BOOKS_DIR = path.join(HOME, ".claude", "library", "books");
+const SKILLS_DIR = path.join(os.homedir(), ".claude", "skills");
+const BOOKS_DIR = resolveBooksDir();
 
 interface MigrateOpts {
 	removeOriginals: boolean;

@@ -32,7 +32,12 @@ Read `EXTRACTION_SUMMARY.md` and plan 8-15 reference files. For each, identify:
 3. Always include:
    - A `core-framework.md` for the book's main thesis
    - A `rules-of-thumb.md` for collected heuristics
-   - For prescriptive books (business, health, self-help, technical, whitepapers): an `implementation-playbook.md` covering how to put the book's advice into practice — action sequences, prioritization, adherence strategies, and common execution pitfalls. Skip this for literary fiction, poetry, plays, and philosophy where "implementation" doesn't apply.
+   - Genre-specific required files:
+     - **Prescriptive** (business, health, self-help, technical, whitepapers): also include `implementation-playbook.md` covering how to put the book's advice into practice — action sequences, prioritization, adherence strategies, and common execution pitfalls
+     - **Literary fiction**: `core-framework.md` should cover the novel's central dialectic and *how it argues* (embodiment, consequence, irresolution, etc.); `rules-of-thumb.md` covers recurring patterns across the work. No `implementation-playbook.md`.
+     - **Philosophy**: `core-framework.md` should cover the central argument and its logical structure; `rules-of-thumb.md` covers philosophical heuristics that can be applied in reasoning. No `implementation-playbook.md`.
+     - **Poetry/drama**: `core-framework.md` should cover the primary formal-thematic relationship; `rules-of-thumb.md` covers patterns of technique. No `implementation-playbook.md`.
+     - **Religious/spiritual**: `core-framework.md` should cover the core doctrinal structure; `rules-of-thumb.md` covers both theological heuristics and practice markers. Include `implementation-playbook.md` only if the work is primarily practice-oriented (e.g., a meditation manual), not for theology or scripture.
 4. Impact levels:
    - **CRITICAL**: Core framework, must-know concepts
    - **HIGH**: Important techniques, common mistakes
@@ -101,6 +106,45 @@ chapter: [chapter number or range]
 
 - [related-reference.md](./related-reference.md) - brief description of connection
 ```
+
+### Genre-Specific Template Guidance
+
+The template above is the universal structure. Each section should be *interpreted* differently depending on genre. The section names stay the same (for consistency), but what goes into them changes.
+
+#### Literary Fiction
+
+- **Key Principle** → the thematic or structural insight the work embodies — not an actionable framework, but a truth the novel demonstrates through narrative
+- **Why This Matters** → the stakes of the dialectic — what competing forces are in play, what's at risk, why this tension matters beyond the novel
+- **Good Examples** → key scenes that *embody* the principle through narrative consequence — characters whose fates test the idea, not just illustrate it
+- **Counterpoints** → foil characters, competing forces, or scenes that *complicate* the principle — not "common mistakes" but genuine dialectical tensions the work stages
+- **Rules of Thumb** → recurring patterns across the work — motifs, structural echoes, character parallels. These are observational patterns, not actionable advice for the reader
+- **Additional section — "What Remains Unresolved"**: For literary works, add this section after Counterpoints when the work deliberately leaves tensions open. Describe what the author refuses to resolve and why that irresolution is itself meaningful.
+- **Note for `core-framework.md`**: Include a "How the Novel Argues" paragraph explaining the work's method of argument — whether it argues through embodiment, consequence, dialectic, irony, juxtaposition, or some combination.
+
+#### Philosophy / Essays
+
+- **Key Principle** → the central argument or claim — stated as a philosophical position, not life advice
+- **Why This Matters** → what problem or question this argument addresses, what's at stake if the argument fails
+- **Good Examples** → thought experiments, demonstrations, or cases that make the argument concrete — the author's own illustrations of abstract claims
+- **Counterpoints** → the strongest objections the author addresses, and how honestly — include the author's actual engagement with opposing views, not just strawmen
+- **Rules of Thumb** → philosophical heuristics that can be applied in reasoning — these DO extract well from philosophy
+- **Additional section — "Argumentative Sequence"**: When a reference file covers a multi-step argument, add this section to show how each claim connects to the next and to the work's broader logical structure.
+
+#### Poetry / Drama
+
+- **Key Principle** → the formal-thematic insight — how a specific technique creates specific meaning
+- **Why This Matters** → what this formal choice achieves that no other choice could — the stakes of technique
+- **Good Examples** → specific passages with formal analysis alongside thematic interpretation — always quote the actual text and show how its form produces its meaning
+- **Counterpoints** → moments where the work subverts its own patterns — formal breaks, tonal shifts, deliberate violations of established expectations
+- **Rules of Thumb** → patterns of technique — recurring formal strategies the author employs, not life advice
+
+#### Religious / Spiritual
+
+- **Key Principle** → for doctrinal references, the theological claim and its logical structure; for experiential references, the practice and what it produces
+- **Why This Matters** → for doctrine, the theological stakes; for practice, the experiential stakes — what the practitioner encounters
+- **Good Examples** → for doctrine, scriptural or traditional demonstrations; for practice, phenomenological descriptions of the experience itself
+- **Counterpoints** → tensions within the tradition — competing interpretations, the gap between ideal teaching and actual practice
+- **Rules of Thumb** → for doctrine, theological heuristics; for practice, experiential markers that indicate progress or common pitfalls
 
 ### Reference File Constraints
 
