@@ -374,7 +374,7 @@ Otherwise:
    - `poetry-drama` → `literature`
    - `religious` → `religion`
 
-3. Based on the book's themes, select 2-3 alternative categories that could plausibly fit. Known categories with themed cover colors: `business`, `health`, `ai`, `technology`, `psychology`, `science`, `finance`, `leadership`, `literature`, `philosophy`, `religion`. Any freeform value is also valid.
+3. Based on the book's themes, select 2-3 alternative categories that could plausibly fit. Known categories with themed cover colors: `business`, `health`, `ai`, `technology`, `software-engineering`, `psychology`, `science`, `finance`, `leadership`, `literature`, `philosophy`, `religion`. Any freeform value is also valid.
 
 4. Present the user with a choice using `AskUserQuestion`:
    - First option: the genre-informed category marked as "(Recommended)"

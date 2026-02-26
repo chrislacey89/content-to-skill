@@ -20,6 +20,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 	science: "#1F2A37",
 	finance: "#0E9F6E",
 	leadership: "#E02424",
+	"software-engineering": "#3B82F6",
 };
 const DEFAULT_COLOR = "#374151";
 
