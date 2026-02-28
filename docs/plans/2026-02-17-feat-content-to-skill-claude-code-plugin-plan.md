@@ -109,7 +109,7 @@ content-to-skill/
 ```json
 {
   "name": "content-to-skill",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "description": "Transform PDFs and EPUBs into Claude Code Agent Skills. Extracts, summarizes, and converts book content into structured skill packages with progressive disclosure.",
   "author": {
     "name": "Christopher Lacey"
