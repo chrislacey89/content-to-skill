@@ -1,7 +1,7 @@
 ---
 name: content-to-skill
 description: "Transforms PDFs, EPUBs, and code exercise repositories into Claude Code Agent Skills with library management. Use when converting books, documents, or coding courses into reusable agent skills."
-argument-hint: "<path> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel] [--citation chapter|page] [--genre prescriptive|literary-fiction|philosophy|poetry-drama|religious] [--category <category>] [--pattern numbered-dotted|generic]"
+argument-hint: "<path> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel] [--citation chapter|page] [--genre prescriptive|literary-fiction|philosophy|poetry-drama|religious] [--category <category>] [--pattern numbered-dotted|generic|flat-file]"
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Glob, Task, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*)
 ---
@@ -28,7 +28,7 @@ Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the 
 | `--citation <style>` | (prompt user) | `chapter` or `page` — skip citation style prompt (book pipeline only) |
 | `--genre <type>` | (prompt user) | `prescriptive`, `literary-fiction`, `philosophy`, `poetry-drama`, or `religious` — skip genre prompt (book pipeline only) |
 | `--category <category>` | (prompt user) | Category for library (e.g., `business`, `technical`) — skip category confirmation |
-| `--pattern <name>` | (auto-detect) | Exercise detector pattern: `numbered-dotted`, `generic` (repo pipeline only) |
+| `--pattern <name>` | (auto-detect) | Exercise detector pattern: `numbered-dotted`, `generic`, `flat-file` (repo pipeline only) |
 
 ## Pipeline Progress Checklist
 
