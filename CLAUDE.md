@@ -24,6 +24,14 @@ scripts/library_index.ts      # Library index builder
 scripts/library_migrate.ts    # Skills-to-library migrator
 ```
 
+## Versioning
+
+When bumping the version, update ALL of these files to keep them in sync:
+
+- `.claude-plugin/plugin.json`
+- `.claude-plugin/marketplace.json`
+- `package.json` (then run `npm install --package-lock-only` to sync `package-lock.json`)
+
 ## Formatting
 
 This project uses [Biome](https://biomejs.dev/) for formatting and linting.
