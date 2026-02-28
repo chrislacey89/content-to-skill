@@ -1,6 +1,6 @@
 {
   "name": "content-to-skill",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "type": "module",
   "description": "Document chunker for content-to-skill pipeline",
   "main": "scripts/chunk_document.ts",
