@@ -1,34 +1,40 @@
 ---
 name: content-to-skill
-description: "Transforms PDFs and EPUBs into Claude Code Agent Skills by chunking, extracting, and converting document content into structured skill packages with progressive disclosure. Use when converting books or documents into reusable agent skills."
-argument-hint: "<path> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel] [--citation chapter|page] [--genre prescriptive|literary-fiction|philosophy|poetry-drama|religious] [--category <category>]"
+description: "Transforms PDFs, EPUBs, and code exercise repositories into Claude Code Agent Skills with library management. Use when converting books, documents, or coding courses into reusable agent skills."
+argument-hint: "<path> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel] [--citation chapter|page] [--genre prescriptive|literary-fiction|philosophy|poetry-drama|religious] [--category <category>] [--pattern numbered-dotted|generic]"
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Glob, Task, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*)
 ---
 
 # Content to Skill
 
-Convert a PDF or EPUB into a complete Agent Skill package.
+Convert a PDF, EPUB, or code exercise repository into a complete Agent Skill package.
+
+**Two pipelines**: This command supports TWO input types. You MUST check whether the input path is a directory or a file FIRST (Step 1), then follow the correct pipeline:
+- **Directory** → Repo Pipeline (Steps 1R–6R)
+- **PDF/EPUB file** → Book Pipeline (Steps 1–6)
 
 ## Arguments
 
-Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the file path.
+Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the input path.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `<path>` | (required) | Path to the PDF or EPUB file |
+| `<path>` | (required) | Path to a PDF/EPUB file **or** a directory containing code exercises |
 | `--name <name>` | (prompt user) | Kebab-case skill name (max 64 chars, lowercase alphanumeric + hyphens) |
 | `--install <location>` | `library` | `library`, `project`, or `personal` |
 | `--on-conflict <action>` | `overwrite` | `overwrite` or `cancel` |
-| `--pages <n>` | `5` | Pages/sections per chunk |
-| `--citation <style>` | (prompt user) | `chapter` or `page` — skip citation style prompt |
-| `--genre <type>` | (prompt user) | `prescriptive`, `literary-fiction`, `philosophy`, `poetry-drama`, or `religious` — skip genre prompt |
-| `--category <category>` | (prompt user) | Book category for library (e.g., `business`, `philosophy`, `literature`) — skip category confirmation |
+| `--pages <n>` | `5` | Pages/sections per chunk (book pipeline only) |
+| `--citation <style>` | (prompt user) | `chapter` or `page` — skip citation style prompt (book pipeline only) |
+| `--genre <type>` | (prompt user) | `prescriptive`, `literary-fiction`, `philosophy`, `poetry-drama`, or `religious` — skip genre prompt (book pipeline only) |
+| `--category <category>` | (prompt user) | Category for library (e.g., `business`, `technical`) — skip category confirmation |
+| `--pattern <name>` | (auto-detect) | Exercise detector pattern: `numbered-dotted`, `generic` (repo pipeline only) |
 
 ## Pipeline Progress Checklist
 
-Copy this checklist and update as you complete each step:
+Copy the appropriate checklist and update as you complete each step.
 
+**Book Pipeline** (PDF/EPUB):
 ```
 - [ ] Step 1: Validate input and setup
 - [ ] Step 1.5: Choose citation style and genre
@@ -41,22 +47,37 @@ Copy this checklist and update as you complete each step:
 - [ ] Step 6: Install skill
 ```
 
+**Repo Pipeline** (code exercise directory):
+```
+- [ ] Step 1R: Detect exercises and setup
+- [ ] Step 2R: Extract exercises (parallel subagents)
+- [ ] Step 3R: Synthesize into skill
+- [ ] Step 4R: Create book.json
+- [ ] Step 5R: Generate cover
+- [ ] Step 6R: Install skill
+```
+
 ## Recovery Preamble
 
 If you have lost context (e.g., after compaction), reconstruct state by reading these files from the working directory:
 
-1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and batch you were on, and the `citationStyle` (`"chapter"` or `"page"`). If `citationStyle` is missing and step is `"citation-style"`, resume at Step 1.5 to ask the user.
-2. Read `/tmp/content-to-skill/<name>/running-context.md` — the extraction state (built by Pass 2)
-3. Read `/tmp/content-to-skill/<name>/book-spine.md` — chapter summaries (built by Pass 2)
-4. Check for `distilled-chunk-*.md` files — if present, Pass 3 has started or completed
-5. Resume from the last completed batch or step
+1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and batch you were on, and the `pipeline` field (`"book"` or `"repo"`)
+2. If `pipeline` is `"repo"`, follow the **Repo Pipeline** steps (1R-6R). Check for `extraction-*.md` files to determine extraction progress.
+3. If `pipeline` is `"book"` (or absent — legacy), follow the **Book Pipeline**:
+   - Check `citationStyle` — if missing and step is `"citation-style"`, resume at Step 1.5
+   - Read `/tmp/content-to-skill/<name>/running-context.md` — the extraction state (built by Pass 2)
+   - Read `/tmp/content-to-skill/<name>/book-spine.md` — chapter summaries (built by Pass 2)
+   - Check for `distilled-chunk-*.md` files — if present, Pass 3 has started or completed
+4. Resume from the last completed batch or step
 
 ## Step 1: Validate Input and Setup
 
-1. Parse `$ARGUMENTS` to extract the file path and optional flags
-2. Verify the file exists and is a `.pdf` or `.epub`:
-   - Use `Bash(ls:*)` to check: `ls -la "<file_path>"`
-   - If not found or wrong type, report a clear error and stop
+1. Parse `$ARGUMENTS` to extract the input path and optional flags
+2. **CRITICAL — Check whether the path is a directory or a file BEFORE doing anything else**:
+   - Use `Bash(ls:*)` to check: `ls -la "<path>"`
+   - **If it is a DIRECTORY** → jump to **Step 1R** (Repo Pipeline). Do NOT continue with the book pipeline steps below.
+   - **If it is a FILE** with `.pdf` or `.epub` extension → continue with Step 3 below (Book Pipeline)
+   - If not found or unrecognized type, report a clear error and stop
 3. Get the skill name:
    - If `--name` was provided, validate it: lowercase, alphanumeric + hyphens, max 64 chars, no leading/trailing/consecutive hyphens
    - If not provided, ask the user: "What should this skill be called? (kebab-case, e.g., `outlive`, `the-prince`)"
@@ -78,11 +99,11 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
 7. Write initial `progress.json`:
    - If both `--citation` and `--genre` are provided:
      ```json
-     { "step": "chunking", "skillName": "<name>", "inputFile": "<path>", "citationStyle": "<chapter|page>", "genreType": "<genre>", "status": "in_progress" }
+     { "step": "chunking", "pipeline": "book", "skillName": "<name>", "inputFile": "<path>", "citationStyle": "<chapter|page>", "genreType": "<genre>", "status": "in_progress" }
      ```
    - Otherwise:
      ```json
-     { "step": "citation-style", "skillName": "<name>", "inputFile": "<path>", "status": "in_progress" }
+     { "step": "citation-style", "pipeline": "book", "skillName": "<name>", "inputFile": "<path>", "status": "in_progress" }
      ```
    - If `--category` was provided, also include `"confirmedCategory": "<category>"` in the JSON
 
@@ -529,4 +550,284 @@ Follow the instructions in `skill-conversion.md` to:
 8. Update `progress.json`:
    ```json
    { "step": "complete", "status": "complete", "installedTo": "<target_dir>", "installType": "library|project|personal" }
+   ```
+
+---
+
+# Repo Pipeline (Code Exercise Directory)
+
+When Step 1 detects the input path is a **directory**, use this pipeline instead of the book pipeline.
+
+## Step 1R: Detect Exercises and Setup
+
+1. Get the skill name:
+   - If `--name` was provided, validate it (same rules as book pipeline)
+   - If not provided, ask the user: "What should this skill be called? (kebab-case, e.g., `testing-fundamentals`, `react-patterns`)"
+
+2. Create the working directory:
+   ```
+   mkdir -p /tmp/content-to-skill/<name>
+   ```
+
+3. Verify Node.js dependencies are installed:
+   ```
+   npm --prefix ${CLAUDE_PLUGIN_ROOT} ls 2>/dev/null || npm install --prefix ${CLAUDE_PLUGIN_ROOT}
+   ```
+
+4. Run exercise detection:
+   ```
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/detect_exercises.ts "<input_dir>" -o /tmp/content-to-skill/<name>
+   ```
+   If `--pattern` was provided, add `-p <pattern>` to the command.
+
+5. Read the manifest:
+   ```
+   Read /tmp/content-to-skill/<name>/exercises_manifest.json
+   ```
+
+6. Report: "Detected N modules with M exercises using <pattern> detector."
+
+7. Write initial `progress.json`:
+   ```json
+   {
+     "step": "extracting",
+     "pipeline": "repo",
+     "skillName": "<name>",
+     "inputDir": "<path>",
+     "totalExercises": M,
+     "totalBatches": B,
+     "lastCompletedBatch": 0,
+     "status": "in_progress"
+   }
+   ```
+
+## Step 2R: Extract Exercises (Parallel Subagents)
+
+Read the extraction methodology ONCE and capture its full contents:
+```
+Read ${CLAUDE_PLUGIN_ROOT}/references/code-extraction-prompt.md
+```
+
+Store the contents of `code-extraction-prompt.md` in memory — you will inline it into every subagent prompt.
+
+1. Read `exercises_manifest.json` to get the full exercise list
+2. Flatten all exercises across modules into a single ordered list
+3. Group exercises into batches of 5
+4. For each batch, spawn up to 5 subagents via `Task` in a **single message** (parallel execution)
+5. Each subagent uses `subagent_type: "general-purpose"` (do NOT pass a `model` parameter)
+
+**Subagent prompt template**:
+
+```
+You are extracting the teaching content from a code exercise. Follow the methodology exactly.
+
+## Task
+1. Read the exercise README (if it exists): {exercise.readme}
+2. Read all problem files from: {exercise.problem.path}
+   Files: {exercise.problem.files}
+3. Read all solution files from: {exercise.solution.path}
+   Files: {exercise.solution.files}
+4. If this exercise is in a module with a README, also read: {module.readme}
+5. Apply the extraction methodology below to produce a structured extraction
+6. Write your extraction to: /tmp/content-to-skill/<name>/extraction-{exercise.id}.md
+7. Return a one-line summary: "Exercise {exercise.id} ({exercise.slug}): [primary concept] — [1-2 key insights]"
+
+## Exercise Metadata
+- ID: {exercise.id}
+- Module: {module.name}
+- Slug: {exercise.slug}
+- Problem files: {exercise.problem.files}
+- Solution files: {exercise.solution.files}
+- TODO markers: {exercise.problem.todoMarkers}
+
+## Hard Constraints
+- Never fabricate content not present in the source files
+- Flag uncertain content with [UNCLEAR: reason]
+- Preserve exact code for before/after examples — do not paraphrase code
+- Focus on the delta between problem and solution — this is where the learning lives
+
+## Extraction Methodology
+[full contents of code-extraction-prompt.md inlined here]
+```
+
+6. Wait for each batch to complete, then:
+   - Report progress: "Batch B/T complete (exercises X-Y). Summaries: [list one-line summaries]"
+   - Update `progress.json` with `lastCompletedBatch: B`
+7. Repeat for the next batch until all exercises are extracted
+
+After all extractions complete, update `progress.json`:
+```json
+{ "step": "synthesizing", "pipeline": "repo", "lastCompletedBatch": T, "status": "in_progress", ... }
+```
+
+## Step 3R: Synthesize into Skill
+
+Spawn ONE subagent via `Task` with `subagent_type: "general-purpose"` (do NOT pass a `model` parameter).
+
+**Subagent prompt**:
+
+```
+You are synthesizing per-exercise extractions from a code course into a production-ready skill package.
+
+## Task
+1. Read the manifest: /tmp/content-to-skill/<name>/exercises_manifest.json
+2. Use Glob to find all extraction files: /tmp/content-to-skill/<name>/extraction-*.md
+3. Read each extraction file in order
+4. Analyze:
+   - Recurring themes across exercises
+   - Natural groupings (by module, by concept type)
+   - The progression arc (what builds on what)
+   - Cross-cutting patterns that appear in multiple modules
+
+5. Create reference files:
+   - mkdir -p /tmp/content-to-skill/<name>/skill/references
+   - One reference file per module: references/<module-slug>.md
+   - If a module has 6+ exercises, split into two reference files
+   - Add cross-cutting files:
+     - references/core-concepts.md — fundamental principles spanning all modules
+     - references/common-patterns.md — recurring code patterns and techniques
+     - references/rules-of-thumb.md — all heuristics collected and organized
+   - Target: 8-15 reference files total, 60-150 lines each
+
+   Reference file format:
+   ---
+   title: "[Module or Topic Name]"
+   impact: "CRITICAL|HIGH|MEDIUM"
+   tags: [tag1, tag2, tag3]
+   exercises: ["ex_id_1", "ex_id_2"]
+   ---
+
+   Sections: Core Concepts, Key Patterns (with code examples), Before/After Quick Reference table, Rules of Thumb, Connections
+
+6. Create SKILL.md:
+   - Write to /tmp/content-to-skill/<name>/skill/SKILL.md
+   - Frontmatter:
+     ---
+     name: <name>
+     description: "[One-sentence when-to-use description]"
+     ---
+   - 3-level progressive disclosure:
+     - Level 1 (30-second): Core framework bullets, quick lookup table, key insight
+     - Level 2 (situational): "I need to..." table, 5-8 common scenarios
+     - Level 3 (conceptual): A-Z concept index with definitions and reference links
+     - All References: table of all reference files with impact and description
+   - Use relative paths: references/filename.md
+   - Keep under 500 lines
+   - Use tables and lists, not prose
+
+7. Self-verify:
+   - All reference files linked in SKILL.md exist
+   - SKILL.md under 500 lines
+   - All relative paths correct
+   - Reference files are 40-200 lines each (target 60-150)
+   - Fix any issues
+
+8. Return: "Synthesis complete. Created N reference files and SKILL.md (M lines)."
+```
+
+Wait for the synthesis subagent to complete. Report progress and update `progress.json`:
+```json
+{ "step": "creating-metadata", "pipeline": "repo", "status": "in_progress", ... }
+```
+
+## Step 4R: Create book.json
+
+1. Read `/tmp/content-to-skill/<name>/skill/SKILL.md` to get the description from frontmatter
+2. Read `/tmp/content-to-skill/<name>/exercises_manifest.json` for source metadata
+
+3. **If `confirmedCategory` already exists in `progress.json`** (from the `--category` flag), use it and skip the prompt. Otherwise, present the user with a choice using `AskUserQuestion`:
+   - "technical (Recommended)" — coding courses, programming exercises
+   - "ai" — AI/ML focused courses
+   - "science" — scientific computing courses
+   - The user can always type a custom category via "Other"
+
+4. Collect all reference filenames from `/tmp/content-to-skill/<name>/skill/references/`
+5. Write `/tmp/content-to-skill/<name>/skill/book.json`:
+   ```json
+   {
+     "name": "<name>",
+     "title": "<Course/Repo Title>",
+     "author": "<Author if known, else null>",
+     "year": null,
+     "category": "<confirmed category>",
+     "tags": ["<tag1>", "<tag2>", "..."],
+     "description": "<One-sentence from SKILL.md frontmatter>",
+     "referenceFiles": ["references/core-concepts.md", "..."]
+   }
+   ```
+   - Infer `title` from the repo directory name or manifest metadata
+   - Infer `tags` from module names and exercise concepts (3-7 kebab-case tags)
+
+6. Update `progress.json`:
+   ```json
+   { "step": "generating-cover", "pipeline": "repo", "status": "in_progress", "confirmedCategory": "<category>", ... }
+   ```
+
+## Step 5R: Generate Cover
+
+Code repos won't have a real book cover to fetch, so generate one programmatically:
+
+```
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/generate_covers.ts --dir /tmp/content-to-skill/<name>/skill
+```
+
+If this fails or `generate_covers.ts` doesn't support `--dir`, use `fetch_cover.ts` which falls back to programmatic generation:
+```
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_cover.ts --dir /tmp/content-to-skill/<name>/skill
+```
+
+Verify:
+- `cover.png` exists in `/tmp/content-to-skill/<name>/skill/`
+- `book.json` contains `coverImage` and `coverSource` fields (add them if the script didn't)
+
+Update `progress.json`:
+```json
+{ "step": "installing", "pipeline": "repo", "status": "in_progress", ... }
+```
+
+## Step 6R: Install Skill
+
+Follow the exact same installation process as the book pipeline's Step 6:
+
+1. Get install location from `--install` flag (default: `library` → `~/.claude/library/books/<name>/`)
+2. Check for conflicts (respect `--on-conflict`)
+3. Copy the skill:
+   ```
+   mkdir -p <target_dir>
+   cp -r /tmp/content-to-skill/<name>/skill/* <target_dir>/
+   ```
+4. If installing to `library`, rebuild the index:
+   ```
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/library_index.ts
+   ```
+5. Verify installation (SKILL.md, references/, book.json)
+6. Write `result.json`:
+   ```json
+   {
+     "status": "success",
+     "skill_name": "<name>",
+     "installed_to": "<target_dir>",
+     "install_type": "library|project|personal",
+     "files_created": N,
+     "exercises_processed": M,
+     "working_directory": "/tmp/content-to-skill/<name>/"
+   }
+   ```
+7. Report success:
+
+   For `library` installs:
+   > Skill "<name>" added to your library at `<target_dir>`.
+   >
+   > Extracted from N exercises across M modules. Contains R reference files.
+   > Use `/library <name>` to load it into any conversation.
+
+   For `project` or `personal` installs:
+   > Skill "<name>" installed to `<target_dir>`.
+   >
+   > Extracted from N exercises across M modules. Contains R reference files.
+   > Try it out by asking a question related to the course content.
+
+8. Update `progress.json`:
+   ```json
+   { "step": "complete", "pipeline": "repo", "status": "complete", "installedTo": "<target_dir>", "installType": "library|project|personal" }
    ```
