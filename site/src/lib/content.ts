@@ -29,15 +29,15 @@ export const pipelineIntro =
 export const pipeline = [
 	{
 		step: 1,
-		name: "Chunk",
-		description:
-			"Splits your PDF or EPUB into sections sized for processing",
-	},
-	{
-		step: 2,
 		name: "Configure",
 		description:
 			"You choose citation style and genre. Extraction adapts to the book's form",
+	},
+	{
+		step: 2,
+		name: "Chunk",
+		description:
+			"Splits your PDF or EPUB into sections sized for processing",
 	},
 	{
 		step: 3,
