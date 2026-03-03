@@ -7,6 +7,7 @@ import {
 	install,
 	benchmark,
 	output,
+	companion,
 	plugin,
 	author,
 } from "../../lib/content";
@@ -463,6 +464,56 @@ import {
 						</div>
 					))
 				}
+			</div>
+		</div>
+	</section>
+
+	<!-- Divider -->
+	<div class="max-w-2xl mx-auto px-6">
+		<hr style="border-color: rgba(162, 144, 112, 0.2);" />
+	</div>
+
+	<!-- Chapter VII: Your Library -->
+	<section class="px-6 py-20">
+		<div class="max-w-2xl mx-auto">
+			<p
+				class="text-xs uppercase tracking-[0.3em] mb-2"
+				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+			>
+				Chapter VII
+			</p>
+			<h2
+				class="text-3xl mb-4"
+				style="font-family: 'Lora', serif; color: #f5f0e8;"
+			>
+				{companion.title}
+			</h2>
+			<p
+				class="text-base leading-relaxed mb-10"
+				style="font-family: 'Old Standard TT', serif; color: #a89070;"
+			>
+				{companion.description}
+			</p>
+
+			<a href={companion.repo} target="_blank" rel="noopener">
+				<img
+					src={companion.image}
+					alt="Library View — visual book grid"
+					class="w-full rounded mb-10"
+					style="border: 1px solid rgba(162, 144, 112, 0.15);"
+				/>
+			</a>
+
+			<div class="text-center">
+				<a
+					href={companion.repo}
+					target="_blank"
+					rel="noopener"
+					class="inline-block px-6 py-3 rounded text-sm tracking-wider uppercase transition-colors"
+					style="font-family: 'Old Standard TT', serif; color: #f5f0e8; background: rgba(194, 83, 45, 0.8); border: 1px solid #c2532d;"
+				>
+					View on GitHub
+				</a>
 			</div>
 		</div>
 	</section>

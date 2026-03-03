@@ -38,6 +38,19 @@ Chunks documents, extracts knowledge in parallel, and synthesizes structured ski
 /library my-book
 ```
 
+## Library View
+
+[Library View](https://github.com/chrislacey89/library_visualizer) is a companion web app that lets you visually browse your converted books — cover art, search, and quick access to every skill in your collection.
+
+![Library View](site/public/library-view.png)
+
+```bash
+git clone https://github.com/chrislacey89/library_visualizer.git
+cd library_visualizer
+npm install
+npm run dev
+```
+
 ## Commands
 
 ### `/content-to-skill`
@@ -90,6 +103,10 @@ The biggest factor in cost is your model choice. Running on Sonnet instead of Op
 
 - Node.js 18+
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+
+## Important Note
+
+This tool is designed for use with content you have legally purchased and own. Please ensure that any books or materials you process through content-to-skill and browse in Library View are ones you have the right to use. Respect authors and publishers by only using legitimately acquired content.
 
 ## License
 

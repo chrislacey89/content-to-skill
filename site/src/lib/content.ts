@@ -155,6 +155,14 @@ export const output = {
 | Build reliable systems          | reliability-operations.md |`,
 };
 
+export const companion = {
+	title: "Your Library",
+	description:
+		"Library View is a companion web app that lets you browse your converted books visually — cover art, search, and quick access to every skill in your collection.",
+	repo: "https://github.com/chrislacey89/library_visualizer",
+	image: "/library-view.png",
+};
+
 export const author = {
 	name: "Chris Lacey",
 	github: "https://github.com/chrislacey89",
