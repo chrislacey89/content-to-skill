@@ -317,9 +317,9 @@ import {
 					<div class="wf-label">PDF / EPUB / Directory</div>
 				</div>
 
-				<div class="wf-conn wf-conn-terra wf-conn-nodot"></div>
+				<div class="wf-conn wf-conn-terra wf-conn-nodot" style="margin-bottom: -14px; z-index: 1;"></div>
 
-				<div class="wf-node wf-decision">
+				<div class="wf-node wf-decision" id="wf-decision">
 					<div class="wf-label">File or Dir?</div>
 				</div>
 
@@ -330,16 +330,11 @@ import {
 					<span class="wf-fork-label">Directory</span>
 				</div>
 
-				<div class="wf-fork-lines">
-					<svg viewBox="0 0 820 44" preserveAspectRatio="none">
-						<path class="wf-fork-path" d="M 410 0 C 410 22, 190 22, 190 44"/>
-						<path class="wf-fork-path" d="M 410 0 C 410 22, 630 22, 630 44"/>
-					</svg>
-				</div>
+				<div class="wf-fork-lines" id="wf-fork-lines-container"></div>
 
 				<div class="wf-fork">
 					<!-- Book Pipeline -->
-					<div class="wf-pipeline">
+					<div class="wf-pipeline" id="wf-book-pipeline">
 						<div class="wf-pipeline-title">Book Pipeline</div>
 
 						<div class="wf-node wf-process">
@@ -374,7 +369,7 @@ import {
 					</div>
 
 					<!-- Repo Pipeline -->
-					<div class="wf-pipeline">
+					<div class="wf-pipeline" id="wf-repo-pipeline">
 						<div class="wf-pipeline-title">Repo Pipeline</div>
 
 						<div class="wf-node wf-process">
@@ -928,6 +923,41 @@ import {
 			}
 		});
 	});
+
+	// Workflow fork lines (decision → pipeline columns)
+	function drawWfFork() {
+		const decision = document.getElementById('wf-decision');
+		const bookPipe = document.getElementById('wf-book-pipeline');
+		const repoPipe = document.getElementById('wf-repo-pipeline');
+		const container = document.getElementById('wf-fork-lines-container');
+		const canvas = document.querySelector('.wf-canvas');
+
+		if (!decision || !bookPipe || !repoPipe || !container || !canvas) return;
+
+		const canvasRect = canvas.getBoundingClientRect();
+		const cw = container.getBoundingClientRect().width;
+		const ch = 44;
+
+		// Decision bottom center (relative to container)
+		const containerRect = container.getBoundingClientRect();
+		const decRect = decision.getBoundingClientRect();
+		const dx = decRect.left + decRect.width / 2 - containerRect.left;
+
+		// Pipeline column centers (relative to container)
+		const bookRect = bookPipe.getBoundingClientRect();
+		const bx = bookRect.left + bookRect.width / 2 - containerRect.left;
+
+		const repoRect = repoPipe.getBoundingClientRect();
+		const rx = repoRect.left + repoRect.width / 2 - containerRect.left;
+
+		container.innerHTML = `<svg viewBox="0 0 ${cw} ${ch}" style="width:100%;height:100%;overflow:visible;">
+			<path d="M ${dx} 0 C ${dx} ${ch * 0.5}, ${bx} ${ch * 0.5}, ${bx} ${ch}" stroke="#c2532d" stroke-width="1" fill="none" opacity="0.3" stroke-dasharray="5 4"/>
+			<path d="M ${dx} 0 C ${dx} ${ch * 0.5}, ${rx} ${ch * 0.5}, ${rx} ${ch}" stroke="#c2532d" stroke-width="1" fill="none" opacity="0.3" stroke-dasharray="5 4"/>
+		</svg>`;
+	}
+
+	drawWfFork();
+	window.addEventListener('resize', drawWfFork);
 
 	// Workflow merge lines
 	function drawWfMerge() {
