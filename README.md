@@ -55,15 +55,19 @@ npm run dev
 
 ### `/content-to-skill`
 
-Convert a PDF or EPUB into an Agent Skill.
+Convert a PDF, EPUB, or code exercise directory into an Agent Skill.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `<path>` | *(required)* | Path to the PDF or EPUB file |
+| `<path>` | *(required)* | Path to a PDF/EPUB file or a directory of code exercises |
 | `--name <name>` | *(prompt)* | Kebab-case skill name |
 | `--install <location>` | `library` | `library`, `project`, or `personal` |
 | `--on-conflict <action>` | `overwrite` | `overwrite` or `cancel` |
-| `--pages <n>` | `5` | Pages/sections per chunk |
+| `--pages <n>` | `5` | Pages/sections per chunk (book pipeline only) |
+| `--citation <style>` | *(prompt)* | `chapter` or `page` (book pipeline only) |
+| `--genre <type>` | *(prompt)* | `prescriptive`, `literary-fiction`, `philosophy`, `poetry-drama`, or `religious` (book pipeline only) |
+| `--category <category>` | *(prompt)* | Category for library (e.g., `business`, `technical`) |
+| `--pattern <name>` | *(auto-detect)* | Exercise detector pattern (repo pipeline only) |
 
 ### `/library`
 
@@ -81,10 +85,27 @@ Browse and load book knowledge.
 
 ![Workflow Diagram](site/public/workflow-diagram.png)
 
-1. **Chunk** -- Splits the document into manageable sections
-2. **Extract** -- Parallel subagents extract knowledge from each chunk
-3. **Synthesize** -- Cross-references extractions into a unified knowledge map
-4. **Convert** -- Produces a structured skill with progressive disclosure and 8-15 reference files
+Two pipelines depending on input type:
+
+**Book Pipeline** (PDF / EPUB):
+
+1. **Configure** — Choose citation style and genre. Extraction adapts to the book's form
+2. **Chunk** — Splits the document into sections sized for processing
+3. **Extract** — Parallel subagents extract knowledge from each chunk
+4. **Cross-Reference** — A dedicated pass builds a unified knowledge map, terminology index, and chapter spine
+5. **Distill** — Each chunk is re-evaluated against the whole book. Surface observations are cut, causal chains deepened
+6. **Synthesize** — Produces EXTRACTION_SUMMARY.md with metadata, core thesis, and cross-reference map
+7. **Convert** — Structured skill with 3-level progressive disclosure and 8-15 reference files
+8. **Cover** — Fetches real cover art from Goodreads and Open Library, or generates one
+9. **Install** — Adds to your personal library, project, or personal skills
+
+**Repo Pipeline** (code exercise directory):
+
+1. **Detect** — Finds exercises and builds a manifest
+2. **Extract** — Parallel subagents extract teaching content from problem/solution pairs
+3. **Synthesize** — Creates reference files per module plus cross-cutting pattern files
+4. **Cover** — Generates a programmatic cover
+5. **Install** — Same install options as the book pipeline
 
 ## Resource Usage
 
