@@ -79,6 +79,8 @@ Browse and load book knowledge.
 
 ## How It Works
 
+![Workflow Diagram](site/public/workflow-diagram.png)
+
 1. **Chunk** -- Splits the document into manageable sections
 2. **Extract** -- Parallel subagents extract knowledge from each chunk
 3. **Synthesize** -- Cross-references extractions into a unified knowledge map
