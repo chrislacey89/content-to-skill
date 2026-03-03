@@ -32,6 +32,10 @@ When bumping the version, update ALL of these files to keep them in sync:
 - `.claude-plugin/marketplace.json`
 - `package.json` (then run `npm install --package-lock-only` to sync `package-lock.json`)
 
+The site version is auto-derived from `plugin.json` at build time (no manual update needed).
+
+The site version is auto-derived from `plugin.json` at build time (no manual update needed).
+
 ## Formatting
 
 This project uses [Biome](https://biomejs.dev/) for formatting and linting.
