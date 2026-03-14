@@ -33,6 +33,23 @@ interface EpubSection {
 	text: string;
 }
 
+interface HtmlToTextNode {
+	attribs?: Record<string, string | undefined>;
+	children?: HtmlToTextNode[];
+}
+
+interface HtmlToTextBuilder {
+	addInline: (text: string) => void;
+}
+
+type HtmlToTextWalk = (nodes: HtmlToTextNode[] | undefined, builder: HtmlToTextBuilder) => void;
+
+type HtmlToTextFormatter = (
+	elem: HtmlToTextNode,
+	walk: HtmlToTextWalk,
+	builder: HtmlToTextBuilder,
+) => void;
+
 export function toArray<T>(value: T | T[] | undefined | null): T[] {
 	if (value === null || value === undefined) return [];
 	return Array.isArray(value) ? value : [value];
@@ -238,12 +255,26 @@ async function extractEpubSections(inputPath: string): Promise<EpubSection[]> {
 		const sectionHtml = await readZipTextFile(zip, sectionPath);
 		if (!sectionHtml) continue;
 
+		const formatters: Record<string, HtmlToTextFormatter> = {
+			figureImage: (elem, _walk, builder) => {
+				const alt = elem.attribs?.alt?.trim();
+				if (alt) builder.addInline(`[Figure: ${alt}]`);
+			},
+			figureCaption: (elem, walk, builder) => {
+				builder.addInline("[Caption: ");
+				walk(elem.children, builder);
+				builder.addInline("]");
+			},
+		};
+
 		const text = normalizeText(
 			convert(sectionHtml, {
 				wordwrap: false,
 				preserveNewlines: true,
+				formatters,
 				selectors: [
-					{ selector: "img", format: "skip" },
+					{ selector: "img", format: "figureImage" },
+					{ selector: "figcaption", format: "figureCaption" },
 					{ selector: "svg", format: "skip" },
 				],
 			}),

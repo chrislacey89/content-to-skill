@@ -111,6 +111,18 @@ For each chunk, produce a markdown extraction following this structure:
 - **Context**: [conditions and situations where this applies] *(For prescriptive books: when to deploy this. For literary/philosophical works: the circumstances or tensions that activate this pattern.)*
 - **Complications**: [what complicates this] *(For prescriptive books: common mistakes and failure modes. For literary/philosophical works: tensions, contradictions, or competing forces.)*
 
+### Diagrams & Figures
+
+For each diagram, chart, figure, or illustration in the chunk:
+
+#### [Figure title or brief description]
+- **What It Shows**: [description of the visual content]
+- **Data / Labels**: [specific values, axis labels, node names, relationship arrows]
+- **Key Insight**: [what argument or point this visual supports in context]
+- **Location**: [Figure X.X, Chapter N] or [Figure X.X, p. N]
+
+*Omit this section if no diagrams appear in the chunk.*
+
 ### Key Insights
 - [Interpretive claim, action item, or thematic proposition with context]
 - [Another insight]
@@ -155,6 +167,10 @@ For images, charts, diagrams, and tables found in the chunk:
 2. Extract all data points, labels, and relationships
 3. Explain the insight or argument the visual supports
 4. Note location: `[Figure X.X, Chapter [N]]` (or `[Figure X.X, p. [N]]` for page citations)
+
+**PDF chunks**: You are reading actual PDF pages — actively look for embedded figures, charts, tables, and illustrations. Do not skip visual content.
+
+**EPUB chunks**: `[Figure: ...]` markers in the text signal where images appear. Use the alt text and surrounding context to infer what the image shows and extract that information into the `### Diagrams & Figures` section.
 
 ## Cross-Referencing Rules
 

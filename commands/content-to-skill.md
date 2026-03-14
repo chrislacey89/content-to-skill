@@ -43,6 +43,7 @@ Copy the appropriate checklist and update as you complete each step.
 - [ ] Step 4: Synthesize
 - [ ] Step 4b: Confirm category
 - [ ] Step 5: Convert to skill (includes book.json)
+- [ ] Step 5c: Generate diagrams
 - [ ] Step 5b: Fetch cover image
 - [ ] Step 6: Install skill
 ```
@@ -469,6 +470,43 @@ Follow the instructions in `skill-conversion.md` to:
    ```json
    { "step": "fetching-cover", "citationStyle": "chapter|page", "status": "in_progress", ... }
    ```
+
+## Step 5c: Generate Diagrams
+
+1. **Select candidates**: Review all reference files in `/tmp/content-to-skill/<name>/skill/references/`. Identify frameworks/models that are best expressed visually:
+   - **Good candidates**: step-by-step processes, hierarchies, 2×2 matrices, causal chains, decision trees, feedback loops
+   - **Skip if**: the book is primarily narrative/philosophical with no structural frameworks
+   - **Limit**: 0–2 diagrams per skill (quality over quantity)
+
+2. **Generate Excalidraw JSON**: For each selected framework, write a valid Excalidraw file to:
+   `/tmp/content-to-skill/<name>/skill/diagrams/<framework-kebab-name>.excalidraw`
+
+   Minimum valid format:
+   ```json
+   {
+     "type": "excalidraw",
+     "version": 2,
+     "source": "content-to-skill",
+     "elements": [ ... ],
+     "appState": { "viewBackgroundColor": "#ffffff" }
+   }
+   ```
+   Use simple shapes only (rectangles, diamonds, arrows, text). Keep to 5–15 elements. Follow the Excalidraw element schema (type, id, x, y, width, height, strokeColor, backgroundColor, text, etc.).
+
+3. **Update reference file**: In the relevant reference file, append:
+   ```markdown
+   ## Diagram
+   [View diagram: diagrams/<framework-kebab-name>.excalidraw]
+   ```
+
+4. **Update SKILL.md**: If any diagrams were created, add a `**Key Diagrams**` line to Level 1.
+
+5. **Update book.json**: If diagrams were created, add:
+   ```json
+   "diagrams": ["diagrams/<name>.excalidraw"]
+   ```
+
+6. Update `progress.json` (set `"step": "fetching-cover"` if not already done).
 
 ## Step 5b: Fetch Cover Image
 
