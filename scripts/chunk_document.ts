@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { XMLParser } from "fast-xml-parser";
-import { convert } from "html-to-text";
+import { convert, type HtmlToTextFormatter } from "html-to-text";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
 
@@ -32,23 +32,6 @@ interface EpubSection {
 	sourcePath: string;
 	text: string;
 }
-
-interface HtmlToTextNode {
-	attribs?: Record<string, string | undefined>;
-	children?: HtmlToTextNode[];
-}
-
-interface HtmlToTextBuilder {
-	addInline: (text: string) => void;
-}
-
-type HtmlToTextWalk = (nodes: HtmlToTextNode[] | undefined, builder: HtmlToTextBuilder) => void;
-
-type HtmlToTextFormatter = (
-	elem: HtmlToTextNode,
-	walk: HtmlToTextWalk,
-	builder: HtmlToTextBuilder,
-) => void;
 
 export function toArray<T>(value: T | T[] | undefined | null): T[] {
 	if (value === null || value === undefined) return [];
