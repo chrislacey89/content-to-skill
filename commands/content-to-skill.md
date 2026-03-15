@@ -493,20 +493,51 @@ Follow the instructions in `skill-conversion.md` to:
    ```
    Use simple shapes only (rectangles, diamonds, arrows, text). Keep to 5–15 elements. Follow the Excalidraw element schema (type, id, x, y, width, height, strokeColor, backgroundColor, text, etc.).
 
-3. **Update reference file**: In the relevant reference file, append:
+3. **Render & Validate** (up to 4 iterations):
+
+   > **One-time setup** (if Playwright/Chromium not yet installed):
+   > ```bash
+   > cd ${CLAUDE_PLUGIN_ROOT}/skills/excalidraw-diagram/references
+   > uv run playwright install chromium
+   > ```
+
+   For each `.excalidraw` file written:
+
+   a. **Render** to PNG:
+      ```bash
+      cd ${CLAUDE_PLUGIN_ROOT}/skills/excalidraw-diagram/references
+      uv run python render_excalidraw.py /tmp/content-to-skill/<name>/skill/diagrams/<name>.excalidraw
+      ```
+      The PNG is written alongside the `.excalidraw` file.
+
+   b. **View** the PNG to visually inspect it.
+
+   c. **Audit** against these criteria:
+      - No text clipping or overflow
+      - No overlapping elements
+      - Arrows route cleanly between nodes
+      - Visual structure matches conceptual structure (shapes argue, not just label)
+      - Eye flow is correct for the diagram type (left→right, top→bottom, convergence for aggregation)
+      - Spacing is consistent and composition is balanced
+
+   d. **Fix**: If any issues are found, edit the JSON in place to address them.
+
+   e. **Repeat** from (a) up to 4 cycles total. Stop when: diagram matches design intent, no visual defects, would show it without caveats.
+
+5. **Update reference file**: In the relevant reference file, append:
    ```markdown
    ## Diagram
    [View diagram: diagrams/<framework-kebab-name>.excalidraw]
    ```
 
-4. **Update SKILL.md**: If any diagrams were created, add a `**Key Diagrams**` line to Level 1.
+6. **Update SKILL.md**: If any diagrams were created, add a `**Key Diagrams**` line to Level 1.
 
-5. **Update book.json**: If diagrams were created, add:
+7. **Update book.json**: If diagrams were created, add:
    ```json
    "diagrams": ["diagrams/<name>.excalidraw"]
    ```
 
-6. Update `progress.json` (set `"step": "fetching-cover"` if not already done).
+8. Update `progress.json` (set `"step": "fetching-cover"` if not already done).
 
 ## Step 5b: Fetch Cover Image
 
