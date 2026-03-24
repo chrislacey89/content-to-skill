@@ -26,6 +26,7 @@ interface Manifest {
 	sectionsPerChunk?: number;
 	totalChunks: number;
 	chunks: Array<Omit<ChunkInfo, "path">>;
+	extractedImages?: string[];
 }
 
 interface EpubSection {
@@ -275,6 +276,72 @@ async function extractEpubSections(inputPath: string): Promise<EpubSection[]> {
 	return sections;
 }
 
+const IMAGE_MEDIA_TYPES = new Set([
+	"image/jpeg",
+	"image/jpg",
+	"image/png",
+	"image/gif",
+	"image/webp",
+	"image/svg+xml",
+	"image/tiff",
+]);
+
+const MIN_IMAGE_SIZE_BYTES = 1024; // skip tiny icons/spacers
+
+async function extractEpubImages(inputPath: string, imagesDir: string): Promise<string[]> {
+	const epubBytes = fs.readFileSync(inputPath);
+	const zip = await JSZip.loadAsync(epubBytes);
+	const parser = new XMLParser({
+		ignoreAttributes: false,
+		attributeNamePrefix: "",
+		removeNSPrefix: true,
+		trimValues: true,
+	});
+
+	const containerXml = await zip.file("META-INF/container.xml")?.async("text");
+	if (!containerXml) return [];
+
+	const containerDoc = parser.parse(containerXml);
+	const rootfilePath = toArray(containerDoc?.container?.rootfiles?.rootfile)[0]?.["full-path"];
+	if (!rootfilePath) return [];
+
+	const opfXml = await readZipTextFile(zip, rootfilePath);
+	if (!opfXml) return [];
+
+	const opfDoc = parser.parse(opfXml);
+	const manifestItems = toArray(opfDoc?.package?.manifest?.item);
+
+	const opfDirRaw = path.posix.dirname(rootfilePath);
+	const opfDir = opfDirRaw === "." ? "" : opfDirRaw;
+
+	const extracted: string[] = [];
+
+	for (const item of manifestItems) {
+		const mediaType = String(item?.["media-type"] || "")
+			.toLowerCase()
+			.split(";")[0]
+			.trim();
+		if (!IMAGE_MEDIA_TYPES.has(mediaType)) continue;
+
+		const href = item?.href;
+		if (!href) continue;
+
+		const zipPath = path.posix.normalize(opfDir ? path.posix.join(opfDir, href) : href);
+		const zipFile = zip.file(zipPath) || zip.file(decodeURIComponent(zipPath));
+		if (!zipFile) continue;
+
+		const imgBytes = await zipFile.async("nodebuffer");
+		if (imgBytes.length < MIN_IMAGE_SIZE_BYTES) continue;
+
+		const basename = path.basename(href);
+		const outPath = path.join(imagesDir, basename);
+		fs.writeFileSync(outPath, imgBytes);
+		extracted.push(`images/${basename}`);
+	}
+
+	return extracted;
+}
+
 async function splitEpub(
 	inputPath: string,
 	sectionsPerChunk = 5,
@@ -288,6 +355,18 @@ async function splitEpub(
 	ensureOutputDir(outputDir);
 
 	console.log(`Loading EPUB: ${inputPath}`);
+
+	// Extract images from EPUB ZIP alongside chunks
+	const imagesDir = path.join(outputDir, "..", "images");
+	ensureOutputDir(imagesDir);
+	console.log("Extracting images...");
+	const extractedImages = await extractEpubImages(inputPath, imagesDir);
+	if (extractedImages.length > 0) {
+		console.log(`Extracted ${extractedImages.length} image(s) to: ${imagesDir}`);
+	} else {
+		console.log("No images found in EPUB.");
+	}
+
 	const sections = await extractEpubSections(inputPath);
 	const totalSections = sections.length;
 	const totalChunks = Math.ceil(totalSections / sectionsPerChunk);
@@ -334,6 +413,7 @@ async function splitEpub(
 			sections: c.sections,
 			sectionCount: c.sectionCount,
 		})),
+		...(extractedImages.length > 0 && { extractedImages }),
 	};
 
 	const manifestPath = writeManifest(outputDir, manifest);

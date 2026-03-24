@@ -113,6 +113,8 @@ For each chunk, produce a markdown extraction following this structure:
 
 ### Diagrams & Figures
 
+Before writing this section, check whether `/tmp/content-to-skill/<name>/images/` exists. If it does, list its files — you will use these to annotate which figures have been extracted as actual image files.
+
 For each diagram, chart, figure, or illustration in the chunk:
 
 #### [Figure title or brief description]
@@ -120,6 +122,7 @@ For each diagram, chart, figure, or illustration in the chunk:
 - **Data / Labels**: [specific values, axis labels, node names, relationship arrows]
 - **Key Insight**: [what argument or point this visual supports in context]
 - **Location**: [Figure X.X, Chapter N] or [Figure X.X, p. N]
+- **Extracted file**: `images/<filename>` *(if a matching image file exists in the `images/` directory — match by name hints, location, or caption; omit this line if no match found)*
 
 *Omit this section if no diagrams appear in the chunk.*
 
@@ -171,6 +174,8 @@ For images, charts, diagrams, and tables found in the chunk:
 **PDF chunks**: You are reading actual PDF pages — actively look for embedded figures, charts, tables, and illustrations. Do not skip visual content.
 
 **EPUB chunks**: `[Figure: ...]` markers in the text signal where images appear. Use the alt text and surrounding context to infer what the image shows and extract that information into the `### Diagrams & Figures` section.
+
+**Extracted images**: If `/tmp/content-to-skill/<name>/images/` exists, those files are actual images extracted from the source document. When you identify a figure in the chunk, check if a matching image file is present and annotate the figure entry with `- Extracted file: images/<filename>`. This allows Step 5a to use the real source image instead of generating a diagram from scratch.
 
 ## Cross-Referencing Rules
 

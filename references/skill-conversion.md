@@ -9,6 +9,13 @@ A skill package consists of:
 ```
 <skill-name>/
 ├── SKILL.md              # Entry point with progressive disclosure
+├── book.json             # Library metadata
+├── cover.png             # Cover image
+├── images/               # Source images extracted from the document (optional)
+│   ├── figure-1.png
+│   └── ...
+├── diagrams/             # Excalidraw diagrams (fallback/supplement, optional)
+│   └── framework.excalidraw
 └── references/
     ├── core-framework.md  # 8-15 reference files
     ├── ...
@@ -97,6 +104,13 @@ chapter: [chapter number or range]
 
 [Include 2-4 memorable quotes. EVERY quote MUST include a chapter number, page number, or structural locator (Part, Act, Book, etc.) matching the skill's citation style. Never include a quote without its source location.]
 
+## Figure
+
+![<descriptive caption explaining what the figure shows>](../images/<filename>)
+*Source: [Book Title], <citation>*
+
+[OPTIONAL — include this section only if a source image was embedded for this concept in Step 5a. If no source image exists and a diagram would help, request an Excalidraw diagram instead (Step 5c). Do not include this section if empty.]
+
 ## Rules of Thumb
 
 - [Actionable heuristic 1]
@@ -154,6 +168,14 @@ The template above is the universal structure. Each section should be *interpret
 - Be specific: include concrete examples, not abstract advice
 - Never fabricate content not in the source extraction
 - Every direct quote (text in quotation marks attributed to the author) must include a citation — chapter number, page number, or structural locator. No exceptions.
+
+### Visuals: Source Images vs Excalidraw
+
+**Prefer actual source images over generated diagrams.** The author designed their figures to communicate the concept — use them when available.
+
+- If an image was extracted from the source document for this concept (Step 5a), embed it in the `## Figure` section using a relative path: `../images/<filename>`
+- Only request an Excalidraw diagram (Step 5c) if no source image covers the concept, or as a supplement when the source image is partial or unclear
+- The `## Figure` section is optional — only include it when an actual image is embedded. Do not leave it empty or with placeholder text.
 
 ## Step 3: Create SKILL.md
 
@@ -251,7 +273,9 @@ Create a `book.json` metadata file for library indexing. This file enables the `
   "category": "business",
   "tags": ["political-strategy", "leadership", "power-dynamics", "realpolitik"],
   "description": "Machiavelli's political realism framework for power acquisition, retention, and leadership strategy.",
-  "referenceFiles": ["references/core-framework.md", "references/rules-of-thumb.md"]
+  "referenceFiles": ["references/core-framework.md", "references/rules-of-thumb.md"],
+  "images": ["images/figure-1.png"],
+  "diagrams": ["diagrams/moral-inversion.excalidraw"]
 }
 ```
 
@@ -267,6 +291,8 @@ Create a `book.json` metadata file for library indexing. This file enables the `
 | `tags` | No | 3-7 kebab-case tags for search/filtering |
 | `description` | Yes | One-sentence description (reuse from SKILL.md frontmatter) |
 | `referenceFiles` | No | Array of relative paths to all reference files |
+| `images` | No | Array of relative paths to source images embedded in references (added by Step 5a) |
+| `diagrams` | No | Array of relative paths to Excalidraw diagram files (added by Step 5c) |
 
 ### How to Generate
 

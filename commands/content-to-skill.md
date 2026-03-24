@@ -3,7 +3,7 @@ name: content-to-skill
 description: "Transforms PDFs, EPUBs, and code exercise repositories into Claude Code Agent Skills with library management. Use when converting books, documents, or coding courses into reusable agent skills."
 argument-hint: "<path> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel] [--citation chapter|page] [--genre prescriptive|literary-fiction|philosophy|poetry-drama|religious] [--category <category>] [--pattern numbered-dotted|generic|flat-file]"
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Glob, Task, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*)
+allowed-tools: Read, Write, Edit, Glob, Task, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*), Bash(pdfimages:*), Bash(pdftoppm:*), Bash(command:*), Bash(wc:*)
 ---
 
 # Content to Skill
@@ -39,11 +39,13 @@ Copy the appropriate checklist and update as you complete each step.
 - [ ] Step 1: Validate input and setup
 - [ ] Step 1.5: Choose citation style and genre
 - [ ] Step 2: Chunk document
+- [ ] Step 2b: Extract source images
 - [ ] Step 3: Extract content (Pass 1 — per-chunk, Pass 2 — cross-reference, Pass 3 — distillation)
 - [ ] Step 4: Synthesize
 - [ ] Step 4b: Confirm category
 - [ ] Step 5: Convert to skill (includes book.json)
-- [ ] Step 5c: Generate diagrams
+- [ ] Step 5a: Select and embed source images
+- [ ] Step 5c: Generate diagrams (Excalidraw fallback/supplement)
 - [ ] Step 5b: Fetch cover image
 - [ ] Step 6: Install skill
 ```
@@ -153,6 +155,35 @@ Carry both `citationStyle` and `genreType` forward in all subsequent `progress.j
    ```json
    { "step": "extracting", "skillName": "<name>", "citationStyle": "chapter|page", "totalChunks": N, "totalBatches": B, "lastCompletedBatch": 0, "status": "in_progress" }
    ```
+
+## Step 2b: Extract Source Images
+
+Attempt to extract embedded images from the source document. These will be used in Step 5a to embed actual source figures into skill reference files.
+
+**For PDFs** (images are not extracted by the chunker):
+```bash
+mkdir -p /tmp/content-to-skill/<name>/images
+if command -v pdfimages >/dev/null 2>&1; then
+  pdfimages -png "<input_file>" /tmp/content-to-skill/<name>/images/img
+  echo "pdfimages: extracted images to images/"
+elif command -v pdftoppm >/dev/null 2>&1; then
+  pdftoppm -png -r 120 "<input_file>" /tmp/content-to-skill/<name>/images/page
+  echo "pdftoppm: rendered pages to images/"
+else
+  echo "No image extraction tool available (install poppler via: brew install poppler)"
+fi
+```
+
+**For EPUBs**: Images were already extracted by the chunker script into `/tmp/content-to-skill/<name>/images/`. Check the manifest for the `extractedImages` field to see what was found.
+
+After the extraction attempt, check how many images are available:
+```bash
+ls /tmp/content-to-skill/<name>/images/ 2>/dev/null | wc -l
+```
+
+Update `progress.json` to include `"hasExtractedImages": true` if the `images/` directory has any files, otherwise `false`.
+
+Report: "Image extraction: found N image file(s)." (proceed regardless — Step 5a handles the empty case gracefully).
 
 ## Step 3: Extract Content (Parallel)
 
@@ -471,14 +502,57 @@ Follow the instructions in `skill-conversion.md` to:
    { "step": "fetching-cover", "citationStyle": "chapter|page", "status": "in_progress", ... }
    ```
 
-## Step 5c: Generate Diagrams
+## Step 5a: Select and Embed Source Images
 
-1. **Select candidates**: Review all reference files in `/tmp/content-to-skill/<name>/skill/references/`. Identify frameworks/models that are best expressed visually:
+Use actual images extracted from the source document in the skill's reference files. This step runs before Excalidraw generation — concepts with a source image don't need a diagram.
+
+1. **Check for extracted images**:
+   ```bash
+   ls /tmp/content-to-skill/<name>/images/ 2>/dev/null
+   ```
+   If the directory is empty or doesn't exist, skip to Step 5c.
+
+2. **Match images to concepts**: Review all `extraction-chunk-NNN.md` files for `### Diagrams & Figures` sections. Each entry notes a figure's title, content description, and location. Cross-reference with the image filenames in `images/` — match by name hints, section/page location, and caption content.
+
+3. **Select 3–8 images** that are most conceptually significant:
+   - **Keep**: diagrams of frameworks, models, processes, hierarchies, or comparisons that directly support a reference file concept
+   - **Skip**: decorative images, author photos, cover art, chapter ornaments, images under ~5KB, and images where the content is unclear or generic
+
+4. **Create the images directory and copy selected files**:
+   ```bash
+   mkdir -p /tmp/content-to-skill/<name>/skill/images
+   cp /tmp/content-to-skill/<name>/images/<selected-file> /tmp/content-to-skill/<name>/skill/images/
+   ```
+
+5. **Embed in reference files**: For each selected image, find the reference file where that concept lives and append a `## Figure` section:
+   ```markdown
+   ## Figure
+   ![<descriptive caption from extraction>](../images/<filename>)
+   *Source: [Book Title], <citation>*
+   ```
+
+6. **Update book.json**: Add the `images` field listing all embedded files:
+   ```json
+   "images": ["images/figure-1.png", "images/figure-2.png"]
+   ```
+
+7. **Note coverage**: Record which reference file concepts now have source images — Step 5c uses this to skip Excalidraw for covered concepts.
+
+If no images match any reference file concept, note this and proceed to Step 5c.
+
+## Step 5c: Generate Diagrams (Excalidraw Fallback/Supplement)
+
+Excalidraw diagrams are generated **only** for concepts that don't already have a source image from Step 5a. The goal is to fill visual gaps, not duplicate what the book already shows.
+
+1. **Check Step 5a coverage**: List which reference file concepts already have an embedded source image (`## Figure` section present).
+
+2. **Select Excalidraw candidates**: From the remaining uncovered concepts, identify frameworks/models that are best expressed visually:
    - **Good candidates**: step-by-step processes, hierarchies, 2×2 matrices, causal chains, decision trees, feedback loops
-   - **Skip if**: the book is primarily narrative/philosophical with no structural frameworks
+   - **Skip if**: the book is primarily narrative/philosophical with no structural frameworks, or all key concepts already have source images
+   - **Supplement mode**: If a source image exists but is low-quality or partial, an Excalidraw diagram may supplement it — keep it focused on what the original doesn't show
    - **Limit**: 0–2 diagrams per skill (quality over quantity)
 
-2. **Generate Excalidraw JSON**: For each selected framework, write a valid Excalidraw file to:
+3. **Generate Excalidraw JSON**: For each selected framework, write a valid Excalidraw file to:
    `/tmp/content-to-skill/<name>/skill/diagrams/<framework-kebab-name>.excalidraw`
 
    Minimum valid format:
@@ -493,7 +567,7 @@ Follow the instructions in `skill-conversion.md` to:
    ```
    Use simple shapes only (rectangles, diamonds, arrows, text). Keep to 5–15 elements. Follow the Excalidraw element schema (type, id, x, y, width, height, strokeColor, backgroundColor, text, etc.).
 
-3. **Render & Validate** (up to 4 iterations):
+4. **Render & Validate** (up to 4 iterations):
 
    > **One-time setup** (if Playwright/Chromium not yet installed):
    > ```bash
@@ -530,9 +604,9 @@ Follow the instructions in `skill-conversion.md` to:
    [View diagram: diagrams/<framework-kebab-name>.excalidraw]
    ```
 
-6. **Update SKILL.md**: If any diagrams were created, add a `**Key Diagrams**` line to Level 1.
+6. **Update SKILL.md**: If any source images (Step 5a) or Excalidraw diagrams were created, add a `**Key Visuals**` line to Level 1.
 
-7. **Update book.json**: If diagrams were created, add:
+7. **Update book.json**: If Excalidraw diagrams were created, add (or merge with existing `images` field):
    ```json
    "diagrams": ["diagrams/<name>.excalidraw"]
    ```
