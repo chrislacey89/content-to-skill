@@ -37,12 +37,11 @@ Copy the appropriate checklist and update as you complete each step.
 **Book Pipeline** (PDF/EPUB):
 ```
 - [ ] Step 1: Validate input and setup
-- [ ] Step 1.5: Choose citation style and genre
+- [ ] Step 1.5: Choose citation style, genre, and category
 - [ ] Step 2: Chunk document
 - [ ] Step 2b: Extract source images
 - [ ] Step 3: Extract content (Pass 1 — per-chunk, Pass 2 — cross-reference, Pass 3 — distillation)
 - [ ] Step 4: Synthesize
-- [ ] Step 4b: Confirm category
 - [ ] Step 5: Convert to skill (includes book.json)
 - [ ] Step 5a: Select and embed source images
 - [ ] Step 5c: Generate diagrams (Excalidraw fallback/supplement)
@@ -67,7 +66,7 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
 1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and batch you were on, and the `pipeline` field (`"book"` or `"repo"`)
 2. If `pipeline` is `"repo"`, follow the **Repo Pipeline** steps (1R-6R). Check for `extraction-*.md` files to determine extraction progress.
 3. If `pipeline` is `"book"` (or absent — legacy), follow the **Book Pipeline**:
-   - Check `citationStyle` — if missing and step is `"citation-style"`, resume at Step 1.5
+   - Check `citationStyle` — if missing and step is `"citation-style"`, resume at Step 1.5; `confirmedCategory` should also be set by the end of Step 1.5
    - Read `/tmp/content-to-skill/<name>/running-context.md` — the extraction state (built by Pass 2)
    - Read `/tmp/content-to-skill/<name>/book-spine.md` — chapter summaries (built by Pass 2)
    - Check for `distilled-chunk-*.md` files — if present, Pass 3 has started or completed
@@ -95,44 +94,69 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
 6. Parse optional `--citation`, `--genre`, and `--category` flags:
    - If `--citation` provided, validate it is `chapter` or `page`
    - If `--genre` provided, validate it is one of: `prescriptive`, `literary-fiction`, `philosophy`, `poetry-drama`, `religious`
-   - If `--category` provided, store it for use in Step 4b (any non-empty string is valid)
-   - If both `--citation` and `--genre` are provided, skip Step 1.5 entirely
-   - If `--category` is provided, skip Step 4b entirely
+   - If `--category` provided, store it (any non-empty string is valid)
+   - If all three (`--citation`, `--genre`, and `--category`) are provided, skip Step 1.5 entirely
+   - If only `--citation` and `--genre` are provided (but not `--category`), still enter Step 1.5 to ask Q3 only
 
 7. Write initial `progress.json`:
-   - If both `--citation` and `--genre` are provided:
+   - If all three (`--citation`, `--genre`, and `--category`) are provided:
      ```json
-     { "step": "chunking", "pipeline": "book", "skillName": "<name>", "inputFile": "<path>", "citationStyle": "<chapter|page>", "genreType": "<genre>", "status": "in_progress" }
+     { "step": "chunking", "pipeline": "book", "skillName": "<name>", "inputFile": "<path>", "citationStyle": "<chapter|page>", "genreType": "<genre>", "confirmedCategory": "<category>", "status": "in_progress" }
      ```
    - Otherwise:
      ```json
      { "step": "citation-style", "pipeline": "book", "skillName": "<name>", "inputFile": "<path>", "status": "in_progress" }
      ```
-   - If `--category` was provided, also include `"confirmedCategory": "<category>"` in the JSON
+   - If any individual flag was provided, include its value in the JSON (e.g., include `"citationStyle"` if `--citation` was given, `"genreType"` if `--genre` was given, `"confirmedCategory"` if `--category` was given)
 
-## Step 1.5: Choose Citation Style and Genre
+## Step 1.5: Choose Citation Style, Genre, and Category
 
-**Skip this step entirely if both `--citation` and `--genre` were provided** (values already written to `progress.json` in Step 1). Proceed directly to Step 2.
+**Skip this step entirely if all three flags (`--citation`, `--genre`, and `--category`) were provided** (values already written to `progress.json` in Step 1). Proceed directly to Step 2.
 
-Otherwise, ask the remaining question(s) using `AskUserQuestion`:
+Otherwise, ask only the question(s) not already resolved by flags, using `AskUserQuestion`:
 
-**Question 1**: "How should quotes be cited in this skill?"
+**Question 1** *(skip if `--citation` was provided)*: "How should quotes be cited in this skill?"
 - "By chapter (e.g., Chapter 3)" — for books, literature, and long-form works with structural divisions
 - "By page number (e.g., p. 42)" — for papers, whitepapers, and paginated academic docs with stable page numbers
 
-**Question 2**: "What type of work is this?"
+**Question 2** *(skip if `--genre` was provided)*: "What type of work is this?"
 - "Non-fiction (prescriptive)" — business, self-help, health, technical
 - "Literary fiction" — novels, short stories, narrative works
 - "Philosophy / essays" — argumentative or reflective non-fiction
 - "Poetry / drama" — verse, plays, performance texts
 - "Religious / spiritual" — scripture, theology, contemplative traditions
 
-Store the choices as `citationStyle` (`"chapter"` or `"page"`) and `genreType` (`"prescriptive"`, `"literary-fiction"`, `"philosophy"`, `"poetry-drama"`, or `"religious"`) and update `progress.json`:
+**Question 3** *(skip if `--category` was provided)*: "What category should this skill be filed under?"
+
+Use the `genreType` (from Q2 or `--genre` flag) to determine the options:
+
+- **`literary-fiction`** or **`poetry-drama`**:
+  - "literature" (Recommended)
+  - "philosophy", "psychology", "history"
+  - Other (type your own)
+
+- **`philosophy`**:
+  - "philosophy" (Recommended)
+  - "literature", "psychology", "science"
+  - Other (type your own)
+
+- **`religious`**:
+  - "religion" (Recommended)
+  - "philosophy", "psychology", "literature"
+  - Other (type your own)
+
+- **`prescriptive`** (no single recommendation — depends on the book's subject):
+  - "business", "health", "psychology", "technology", "software-engineering", "science", "finance", "leadership"
+  - Other (type your own)
+
+Known categories with themed cover colors: `business`, `health`, `ai`, `technology`, `software-engineering`, `psychology`, `science`, `finance`, `leadership`, `literature`, `philosophy`, `religion`. Any freeform value is also valid.
+
+Store the choices as `citationStyle` (`"chapter"` or `"page"`), `genreType` (`"prescriptive"`, `"literary-fiction"`, `"philosophy"`, `"poetry-drama"`, or `"religious"`), and `confirmedCategory` (the selected or typed category string), then update `progress.json`:
 ```json
-{ "step": "chunking", "skillName": "<name>", "inputFile": "<path>", "citationStyle": "chapter|page", "genreType": "<genreType>", "status": "in_progress" }
+{ "step": "chunking", "skillName": "<name>", "inputFile": "<path>", "citationStyle": "chapter|page", "genreType": "<genreType>", "confirmedCategory": "<category>", "status": "in_progress" }
 ```
 
-Carry both `citationStyle` and `genreType` forward in all subsequent `progress.json` updates.
+Carry `citationStyle`, `genreType`, and `confirmedCategory` forward in all subsequent `progress.json` updates.
 
 **Guidance**: If the source is a classic literary text (e.g., Project Gutenberg), a novel, or any work where page numbers are artifacts of digital rendering rather than the original publication, recommend "By chapter." The extraction agents will adapt to the source's actual structure (Book, Part, Canto, Act, etc.) if standard chapter numbers aren't present.
 
@@ -409,36 +433,7 @@ Pass 2 already built `running-context.md`, `terminology.md`, and `book-spine.md`
 
 6. Update `progress.json`:
    ```json
-   { "step": "confirming-category", "citationStyle": "chapter|page", "status": "in_progress", ... }
-   ```
-
-## Step 4b: Confirm Category
-
-**If `confirmedCategory` already exists in `progress.json`** (from the `--category` flag), skip this step. Update `progress.json` with `"step": "converting"` and proceed directly to Step 5.
-
-Otherwise:
-
-1. Read `/tmp/content-to-skill/<name>/EXTRACTION_SUMMARY.md` and identify the inferred category from the book metadata section.
-
-2. Use the `genreType` from `progress.json` to inform your category recommendation. Genre-to-category mappings:
-   - `prescriptive` → infer from content (business, health, self-help, technical, etc.)
-   - `literary-fiction` → `literature`
-   - `philosophy` → `philosophy`
-   - `poetry-drama` → `literature`
-   - `religious` → `religion`
-
-3. Based on the book's themes, select 2-3 alternative categories that could plausibly fit. Known categories with themed cover colors: `business`, `health`, `ai`, `technology`, `software-engineering`, `psychology`, `science`, `finance`, `leadership`, `literature`, `philosophy`, `religion`. Any freeform value is also valid.
-
-4. Present the user with a choice using `AskUserQuestion`:
-   - First option: the genre-informed category marked as "(Recommended)"
-   - Next 2-3 options: plausible alternatives based on the book's themes
-   - The user can always type a custom category via the built-in "Other" option
-
-4. Store the user's confirmed category for use in Step 5.
-
-5. Update `progress.json`:
-   ```json
-   { "step": "converting", "citationStyle": "chapter|page", "status": "in_progress", "confirmedCategory": "<category>", ... }
+   { "step": "converting", "citationStyle": "chapter|page", "status": "in_progress", ... }
    ```
 
 ## Step 5: Convert to Skill
