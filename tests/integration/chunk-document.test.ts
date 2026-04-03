@@ -38,13 +38,18 @@ describe("chunk_document.ts", () => {
 			expect(manifest.totalChunks).toBe(2);
 			expect(manifest.chunks).toHaveLength(2);
 
-			// Verify chunk file naming
-			expect(manifest.chunks[0].name).toBe("chunk_001.pdf");
-			expect(manifest.chunks[1].name).toBe("chunk_002.pdf");
+			// Verify chunk file naming (PDFs are text-extracted like EPUBs)
+			expect(manifest.chunks[0].name).toBe("chunk_001.txt");
+			expect(manifest.chunks[1].name).toBe("chunk_002.txt");
 
 			// Verify chunk files exist
-			expect(fs.existsSync(path.join(outputDir, "chunk_001.pdf"))).toBe(true);
-			expect(fs.existsSync(path.join(outputDir, "chunk_002.pdf"))).toBe(true);
+			expect(fs.existsSync(path.join(outputDir, "chunk_001.txt"))).toBe(true);
+			expect(fs.existsSync(path.join(outputDir, "chunk_002.txt"))).toBe(true);
+
+			// Verify extracted text contains page markers and content
+			const chunkContent = fs.readFileSync(path.join(outputDir, "chunk_001.txt"), "utf8");
+			expect(chunkContent).toContain("[Page ");
+			expect(chunkContent.length).toBeGreaterThan(0);
 		});
 
 		it("creates single chunk when pages-per-chunk >= total pages", () => {

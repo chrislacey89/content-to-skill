@@ -7,6 +7,7 @@ import { XMLParser } from "fast-xml-parser";
 import { convert, type HtmlToTextFormatter } from "html-to-text";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
+import { extractText, getDocumentProxy } from "unpdf";
 
 interface ChunkInfo {
 	name: string;
@@ -106,14 +107,29 @@ async function splitPdf(
 
 	console.log(`Loading PDF: ${inputPath}`);
 	const pdfBytes = fs.readFileSync(inputPath);
+
 	const pdfDoc = await PDFDocument.load(pdfBytes);
 	const totalPages = pdfDoc.getPageCount();
+
+	// Extract text from all pages via unpdf
+	const proxy = await getDocumentProxy(new Uint8Array(pdfBytes));
+	const { text: pageTexts } = await extractText(proxy, { mergePages: false });
+
+	// Warn if PDF appears to be scanned/image-only
+	const totalChars = pageTexts.reduce((sum, t) => sum + t.length, 0);
+	const avgCharsPerPage = totalChars / totalPages;
+	if (avgCharsPerPage < 50) {
+		console.warn(
+			`WARNING: Very little text extracted (avg ${Math.round(avgCharsPerPage)} chars/page). ` +
+				`This PDF may be scanned or image-only. Consider using OCR first.`,
+		);
+	}
 
 	console.log(`Total pages: ${totalPages}`);
 	console.log(`Pages per chunk: ${pagesPerChunk}`);
 
 	const totalChunks = Math.ceil(totalPages / pagesPerChunk);
-	console.log(`Creating ${totalChunks} chunk(s)...\n`);
+	console.log(`Creating ${totalChunks} text chunk(s)...\n`);
 
 	const chunkFiles: ChunkInfo[] = [];
 
@@ -121,23 +137,17 @@ async function splitPdf(
 		const startPage = i * pagesPerChunk;
 		const endPage = Math.min(startPage + pagesPerChunk, totalPages);
 
-		const chunkPdf = await PDFDocument.create();
+		const chunkBody = pageTexts
+			.slice(startPage, endPage)
+			.map((pageText, idx) => {
+				const pageNum = startPage + idx + 1;
+				return `[Page ${pageNum}]\n\n${normalizeText(pageText)}`;
+			})
+			.join("\n\n\n");
 
-		const pageIndices: number[] = [];
-		for (let j = startPage; j < endPage; j++) {
-			pageIndices.push(j);
-		}
-
-		const copiedPages = await chunkPdf.copyPages(pdfDoc, pageIndices);
-		for (const page of copiedPages) {
-			chunkPdf.addPage(page);
-		}
-
-		const chunkName = `chunk_${String(i + 1).padStart(3, "0")}.pdf`;
+		const chunkName = `chunk_${String(i + 1).padStart(3, "0")}.txt`;
 		const chunkPath = path.join(outputDir, chunkName);
-
-		const chunkBytes = await chunkPdf.save();
-		fs.writeFileSync(chunkPath, chunkBytes);
+		fs.writeFileSync(chunkPath, `${chunkBody}\n`, "utf8");
 
 		chunkFiles.push({
 			name: chunkName,

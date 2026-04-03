@@ -272,10 +272,11 @@ function detectDirectoryExercises(
 	>();
 
 	for (const p of parsed) {
-		if (!exerciseMap.has(p.number)) {
-			exerciseMap.set(p.number, { number: p.number, slug: p.slug });
+		let entry = exerciseMap.get(p.number);
+		if (!entry) {
+			entry = { number: p.number, slug: p.slug };
+			exerciseMap.set(p.number, entry);
 		}
-		const entry = exerciseMap.get(p.number)!;
 		if (p.role === "problem") {
 			entry.problem = {
 				dir: p.dirName,
@@ -342,16 +343,17 @@ function detectFlatFileExercises(
 		const info = detector.parseExercise(file);
 		if (!info) continue;
 
-		if (!exerciseMap.has(info.number)) {
-			exerciseMap.set(info.number, {
+		let entry = exerciseMap.get(info.number);
+		if (!entry) {
+			entry = {
 				number: info.number,
 				slug: info.slug,
 				problemFiles: [],
 				solutionFiles: [],
 				todoMarkers: 0,
-			});
+			};
+			exerciseMap.set(info.number, entry);
 		}
-		const entry = exerciseMap.get(info.number)!;
 		if (info.role === "problem") {
 			entry.problemFiles.push(file);
 			entry.todoMarkers += countTodoMarkersInFile(join(modulePath, file));

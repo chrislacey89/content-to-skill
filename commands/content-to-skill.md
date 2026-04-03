@@ -220,7 +220,7 @@ Store the contents of `research-prompt.md` in memory — you will inline it into
 
 ### Pass 1 — Parallel Chunk Extraction (batches of 5)
 
-1. Read `manifest.json` to get the total chunk count and file extension (`.pdf` or `.txt`)
+1. Read `manifest.json` to get the total chunk count (all chunks are `.txt` for both PDF and EPUB)
 2. Group chunks into batches of 5 (e.g., chunks 1-5, 6-10, 11-15, ...)
 3. For each batch, spawn up to 5 subagents via `Task` in a **single message** (parallel execution)
 4. Each subagent uses `subagent_type: "general-purpose"` with this prompt template. Do NOT pass a `model` parameter — subagents inherit the parent model automatically.
@@ -231,7 +231,7 @@ Store the contents of `research-prompt.md` in memory — you will inline it into
 You are extracting knowledge from a book chunk. Follow the methodology exactly.
 
 ## Task
-1. Read: /tmp/content-to-skill/<name>/chunks/chunk_NNN.<ext>
+1. Read: /tmp/content-to-skill/<name>/chunks/chunk_NNN.txt
 2. Apply the extraction methodology below to produce a structured extraction
 3. Write your extraction to: /tmp/content-to-skill/<name>/extraction-chunk-NNN.md
 4. Return a one-line summary: "Chunk NNN: [Chapter Title] — [2-3 key concepts found]"

@@ -171,7 +171,7 @@ For images, charts, diagrams, and tables found in the chunk:
 3. Explain the insight or argument the visual supports
 4. Note location: `[Figure X.X, Chapter [N]]` (or `[Figure X.X, p. [N]]` for page citations)
 
-**PDF chunks**: You are reading actual PDF pages — actively look for embedded figures, charts, tables, and illustrations. Do not skip visual content.
+**PDF chunks**: You are reading extracted text from PDF pages. Figures, charts, and illustrations have been extracted separately as image files (see the `images/` directory). The text may contain figure captions, table data, or `[Page N]` markers — use these to identify where visual content appeared in the original. Cross-reference with images in the `images/` directory when annotating the `### Diagrams & Figures` section.
 
 **EPUB chunks**: `[Figure: ...]` markers in the text signal where images appear. Use the alt text and surrounding context to infer what the image shows and extract that information into the `### Diagrams & Figures` section.
 

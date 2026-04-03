@@ -1,6 +1,6 @@
 {
   "name": "content-to-skill",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "type": "module",
   "description": "Document chunker for content-to-skill pipeline",
   "main": "scripts/chunk_document.ts",
@@ -18,7 +18,8 @@
     "fast-xml-parser": "^5.3.5",
     "html-to-text": "^9.0.5",
     "jszip": "^3.10.1",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "unpdf": "^0.12"
   },
   "optionalDependencies": {
     "@napi-rs/canvas": "^0.1.65"
