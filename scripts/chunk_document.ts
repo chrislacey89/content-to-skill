@@ -52,6 +52,48 @@ export function normalizeText(text: string | undefined | null): string {
 		.trim();
 }
 
+export function repairHyphenation(text: string): string {
+	// Join words broken across line ends: "under-\nstanding" → "understanding"
+	return text.replace(/([a-z])-\n([a-z])/g, "$1$2");
+}
+
+function detectRunningElements(normalizedPages: string[]): Set<string> {
+	const runningElements = new Set<string>();
+	if (normalizedPages.length < 4) return runningElements;
+
+	const HEADER_LINES = 2;
+	const FOOTER_LINES = 2;
+	const minCount = Math.max(3, Math.ceil(normalizedPages.length * 0.4));
+
+	const counts = new Map<string, number>();
+	for (const pageText of normalizedPages) {
+		const lines = pageText.split("\n").filter((l) => l.trim().length >= 3);
+		const candidates = [...lines.slice(0, HEADER_LINES), ...lines.slice(-FOOTER_LINES)];
+		const seen = new Set<string>();
+		for (const line of candidates) {
+			const trimmed = line.trim();
+			if (!seen.has(trimmed)) {
+				seen.add(trimmed);
+				counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1);
+			}
+		}
+	}
+
+	for (const [line, count] of counts) {
+		if (count >= minCount) runningElements.add(line);
+	}
+	return runningElements;
+}
+
+function stripRunningElements(text: string, runningElements: Set<string>): string {
+	if (runningElements.size === 0) return text;
+	return text
+		.split("\n")
+		.filter((line) => !runningElements.has(line.trim()))
+		.join("\n")
+		.replace(/\n{3,}/g, "\n\n");
+}
+
 export function resolveInputMeta(inputPath: string): { ext: string; name: string } {
 	const extWithCase = path.extname(inputPath);
 	return {
@@ -95,7 +137,7 @@ function checkFileSize(inputPath: string): number {
 
 async function splitPdf(
 	inputPath: string,
-	pagesPerChunk = 5,
+	pagesPerChunk = 10,
 	outputDir: string | null = null,
 ): Promise<Manifest> {
 	ensureInputExists(inputPath);
@@ -125,6 +167,13 @@ async function splitPdf(
 		);
 	}
 
+	// Normalize and repair hyphenation upfront, then detect running headers/footers
+	const processedPages = pageTexts.map((t) => repairHyphenation(normalizeText(t)));
+	const runningElements = detectRunningElements(processedPages);
+	if (runningElements.size > 0) {
+		console.log(`Stripping ${runningElements.size} running element(s) (headers/footers).`);
+	}
+
 	console.log(`Total pages: ${totalPages}`);
 	console.log(`Pages per chunk: ${pagesPerChunk}`);
 
@@ -137,11 +186,11 @@ async function splitPdf(
 		const startPage = i * pagesPerChunk;
 		const endPage = Math.min(startPage + pagesPerChunk, totalPages);
 
-		const chunkBody = pageTexts
+		const chunkBody = processedPages
 			.slice(startPage, endPage)
 			.map((pageText, idx) => {
 				const pageNum = startPage + idx + 1;
-				return `[Page ${pageNum}]\n\n${normalizeText(pageText)}`;
+				return `[Page ${pageNum}]\n\n${stripRunningElements(pageText, runningElements)}`;
 			})
 			.join("\n\n\n");
 
@@ -435,7 +484,7 @@ async function splitEpub(
 
 async function splitDocument(
 	inputPath: string,
-	unitsPerChunk = 5,
+	unitsPerChunk = 10,
 	outputDir: string | null = null,
 ): Promise<Manifest> {
 	const { ext } = resolveInputMeta(inputPath);
@@ -456,7 +505,7 @@ function printUsage(): void {
 Usage: tsx chunk_document.ts <input.pdf|input.epub> [options]
 
 Options:
-  -p, --pages <n>     Pages/sections per chunk (default: 5)
+  -p, --pages <n>     Pages/sections per chunk (default: 10)
   -o, --output <dir>  Output directory (default: <input>_chunks/)
   -h, --help          Show this help message
 
@@ -477,7 +526,7 @@ async function main(): Promise<void> {
 	}
 
 	let inputPath: string | null = null;
-	let pagesPerChunk = 5;
+	let pagesPerChunk = 10;
 	let outputDir: string | null = null;
 
 	for (let i = 0; i < args.length; i++) {
