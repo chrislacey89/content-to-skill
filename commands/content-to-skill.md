@@ -29,6 +29,7 @@ Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the 
 | `--genre <type>` | (prompt user) | `prescriptive`, `literary-fiction`, `philosophy`, `poetry-drama`, or `religious` — skip genre prompt (book pipeline only) |
 | `--category <category>` | (prompt user) | Category for library (e.g., `business`, `technical`) — skip category confirmation |
 | `--pattern <name>` | (auto-detect) | Exercise detector pattern: `numbered-dotted`, `generic`, `flat-file` (repo pipeline only) |
+| `--pass1-model <model>` | (inherit parent) | Override the model for Pass 1 chunk extraction: `haiku`, `sonnet`, or `opus`. Gated to `prescriptive` genre. Only affects Pass 1 — Pass 2, Pass 3, and synthesis always inherit the parent model. |
 
 ## Pipeline Progress Checklist
 
@@ -91,10 +92,11 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
    ```
    npm --prefix ${CLAUDE_PLUGIN_ROOT} ls 2>/dev/null || npm install --prefix ${CLAUDE_PLUGIN_ROOT}
    ```
-6. Parse optional `--citation`, `--genre`, and `--category` flags:
+6. Parse optional `--citation`, `--genre`, `--category`, and `--pass1-model` flags:
    - If `--citation` provided, validate it is `chapter` or `page`
    - If `--genre` provided, validate it is one of: `prescriptive`, `literary-fiction`, `philosophy`, `poetry-drama`, `religious`
    - If `--category` provided, store it (any non-empty string is valid)
+   - If `--pass1-model` provided, validate it is `haiku`, `sonnet`, or `opus`. **Gate**: if the value is `haiku`, the resolved `genreType` (from `--genre` flag or Step 1.5) must be `prescriptive` — otherwise stop with: "Haiku Pass 1 is only validated for prescriptive non-fiction; literary, philosophical, poetic, and religious genres require the parent model. Re-run without `--pass1-model haiku` or with a different value." If `--genre` was not provided, defer this gate check until Step 1.5 resolves `genreType`.
    - If all three (`--citation`, `--genre`, and `--category`) are provided, skip Step 1.5 entirely
    - If only `--citation` and `--genre` are provided (but not `--category`), still enter Step 1.5 to ask Q3 only
 
@@ -107,7 +109,7 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
      ```json
      { "step": "citation-style", "pipeline": "book", "skillName": "<name>", "inputFile": "<path>", "status": "in_progress" }
      ```
-   - If any individual flag was provided, include its value in the JSON (e.g., include `"citationStyle"` if `--citation` was given, `"genreType"` if `--genre` was given, `"confirmedCategory"` if `--category` was given)
+   - If any individual flag was provided, include its value in the JSON (e.g., include `"citationStyle"` if `--citation` was given, `"genreType"` if `--genre` was given, `"confirmedCategory"` if `--category` was given, `"pass1Model"` if `--pass1-model` was given)
 
 ## Step 1.5: Choose Citation Style, Genre, and Category
 
@@ -156,7 +158,9 @@ Store the choices as `citationStyle` (`"chapter"` or `"page"`), `genreType` (`"p
 { "step": "chunking", "skillName": "<name>", "inputFile": "<path>", "citationStyle": "chapter|page", "genreType": "<genreType>", "confirmedCategory": "<category>", "status": "in_progress" }
 ```
 
-Carry `citationStyle`, `genreType`, and `confirmedCategory` forward in all subsequent `progress.json` updates.
+**Deferred Pass 1 model gate**: If `--pass1-model haiku` was provided in Step 1 but `genreType` was not yet resolved, enforce the gate now. If the resolved `genreType` is anything other than `prescriptive`, stop with: "Haiku Pass 1 is only validated for prescriptive non-fiction; the resolved genre is `<genreType>`. Re-run without `--pass1-model haiku` or with a different value."
+
+Carry `citationStyle`, `genreType`, `confirmedCategory`, and (if set) `pass1Model` forward in all subsequent `progress.json` updates.
 
 **Guidance**: If the source is a classic literary text (e.g., Project Gutenberg), a novel, or any work where page numbers are artifacts of digital rendering rather than the original publication, recommend "By chapter." The extraction agents will adapt to the source's actual structure (Book, Part, Canto, Act, etc.) if standard chapter numbers aren't present.
 
@@ -223,7 +227,9 @@ Store the contents of `research-prompt.md` in memory — you will inline it into
 1. Read `manifest.json` to get the total chunk count (all chunks are `.txt` for both PDF and EPUB)
 2. Group chunks into batches of 5 (e.g., chunks 1-5, 6-10, 11-15, ...)
 3. For each batch, spawn up to 5 subagents via `Task` in a **single message** (parallel execution)
-4. Each subagent uses `subagent_type: "general-purpose"` with this prompt template. Do NOT pass a `model` parameter — subagents inherit the parent model automatically.
+4. Each subagent uses `subagent_type: "general-purpose"` with this prompt template.
+   - **Model selection**: Read `pass1Model` from `progress.json`. If set (`"haiku"`, `"sonnet"`, or `"opus"`), pass `model: "<pass1Model>"` to each `Task` call. If absent, do NOT pass a `model` parameter — subagents inherit the parent model automatically.
+   - This is the only step in the pipeline where Pass 1 model selection applies. Pass 2, Pass 3, and synthesis always inherit the parent model.
 
    **Before spawning**, replace `{citationStyle}` and `{genreType}` in the prompt below with the actual values from `progress.json`.
 
