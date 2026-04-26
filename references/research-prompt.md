@@ -82,6 +82,17 @@ Apply the specified format consistently. If the source material does not contain
 3. Never cite PDF-viewer page numbers as if they were the source's page numbers — if the document is a plain-text rendering with no real pagination, use structural citations instead
 4. Apply the adapted format consistently across the entire extraction — do not mix styles
 
+**Citation hygiene — never produce these malformed patterns**:
+
+- ❌ `(Chapter [Some Section Title]: [Page 146])` — square brackets are placeholders in the templates above; never include literal `[` `]` characters around the actual field values you fill in
+- ❌ `(Chapter [UNCLEAR]: Section Name)` — if the chapter number is genuinely unknown, do not invent a placeholder citation. Either find a structural locator from the source (chapter title, section heading, part name) or flag the entire quote with `[UNCLEAR: no chapter/page locator in source chunk]` after the citation
+- ❌ Mixing chapter and page styles in the same citation, e.g., `(Chapter 5: Stumped, p. 146)` — pick one based on `citationStyle` and stay consistent
+- ✅ `(Chapter 5: Stumped)` — chapter style, real values, no literal brackets
+- ✅ `(p. 146)` — page style, real value
+- ✅ `(Book V, Ch. 3)` — adapted structural citation when source uses Book/Part divisions
+
+If the source chunk does not provide *any* locator (no chapter title, no page marker, no structural division), prefer omitting the quote over inventing a citation.
+
 ## Output Schema
 
 For each chunk, produce a markdown extraction following this structure:
