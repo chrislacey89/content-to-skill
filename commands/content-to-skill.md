@@ -31,7 +31,7 @@ Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the 
 | `--category <category>` | (prompt user) | Category for library (e.g., `business`, `technical`) — skip category confirmation |
 | `--pattern <name>` | (auto-detect) | Exercise detector pattern: `numbered-dotted`, `generic`, `flat-file` (repo pipeline only) |
 | `--site-base <url>` | (required for docs) | Base URL of the rendered docs site (e.g., `https://effect.website`). Used to construct citations. Docs pipeline only. |
-| `--docs-root <path>` | `docs/` | Repo-relative path to the docs subtree to walk (e.g., `content/src/content/docs/docs`). Docs pipeline only. |
+| `--docs-root <path>` | `docs/` | Repo-relative path to the **Starlight content root** (e.g., `content/src/content/docs/docs`). This anchors all citation URLs — the URL prefix the rendered site mounts at is `<site-base>/<lastSegment(docs-root)>/...`. To walk only a subtree of the content root, pass that subtree as the input's `:path` component (e.g., `github:owner/repo:content/src/content/docs/docs/error-management`); the URL math still uses `--docs-root`. Docs pipeline only. |
 
 ## Pipeline Progress Checklist
 
@@ -1098,10 +1098,24 @@ You are extracting Starlight-format MDX documentation for a coding skill.
 - Files: {group.files (rel paths + frontmatter title)}
 
 ## Citation Construction
-For every citation, the URL must be constructed by `scripts/build_citation.ts`. Format:
-  <site-base>/<docsRoot-last-segment>/<rel-path-without-extension>/#<heading-slug>
-Example: content/src/content/docs/docs/error-management/expected-errors.mdx + heading "Catching Tagged Errors"
-  → https://effect.website/docs/error-management/expected-errors/#catching-tagged-errors
+For every citation, invoke `scripts/build_citation.ts` (do not paraphrase the
+algorithm). The function takes the FULL repo-relative file path, not the
+manifest's relPath — construct it by joining `manifest.docsRoot` with the
+file's `relPath`:
+
+  filePath = `${manifest.docsRoot}/${file.relPath}`
+
+Then call:
+
+```
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/build_citation.ts <filePath> <heading> <siteBase> <docsRoot>
+```
+
+(Or import the function directly if you are running inside the plugin's
+TypeScript context.) The URL is `<site-base>/<lastSegment(docsRoot)>/<rel-path-without-extension>/#<heading-slug>`.
+
+Example: `manifest.docsRoot = "content/src/content/docs/docs"`, `file.relPath = "error-management/expected-errors.mdx"`, heading "Catching Tagged Errors"
+  → `https://effect.website/docs/error-management/expected-errors/#catching-tagged-errors`
 
 ## Hard Constraints
 - Code blocks must be character-perfect verbatim

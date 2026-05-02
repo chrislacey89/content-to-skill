@@ -208,9 +208,16 @@ export async function walkAndGroup(
 	sourceRoot: string,
 	docsRoot: string,
 	siteBase: string,
+	walkSubtree?: string,
 ): Promise<Manifest> {
 	const docsAbs = path.isAbsolute(docsRoot) ? docsRoot : path.join(sourceRoot, docsRoot);
 	const docsRootRel = path.relative(sourceRoot, docsAbs);
+
+	const walkAbs = walkSubtree
+		? path.isAbsolute(walkSubtree)
+			? walkSubtree
+			: path.join(sourceRoot, walkSubtree)
+		: docsAbs;
 
 	let docsStat: Awaited<ReturnType<typeof stat>>;
 	try {
@@ -222,7 +229,22 @@ export async function walkAndGroup(
 		throw new Error(`docsRoot is not a directory: ${docsAbs}`);
 	}
 
-	const absFiles = await walkMdx(docsAbs);
+	if (walkSubtree) {
+		try {
+			const walkStat = await stat(walkAbs);
+			if (!walkStat.isDirectory()) {
+				throw new Error(`walkSubtree is not a directory: ${walkAbs}`);
+			}
+		} catch {
+			throw new Error(`walkSubtree does not exist: ${walkAbs}`);
+		}
+		const walkRel = path.relative(docsAbs, walkAbs);
+		if (walkRel.startsWith("..") || path.isAbsolute(walkRel)) {
+			throw new Error(`walkSubtree (${walkAbs}) must live under docsRoot (${docsAbs})`);
+		}
+	}
+
+	const absFiles = await walkMdx(walkAbs);
 
 	const docFiles: DocFile[] = [];
 	let starlightCount = 0;
@@ -331,8 +353,12 @@ async function main(argv: string[]): Promise<void> {
 		defaultRef = result.defaultRef;
 	}
 
-	const docsRoot = input.path ?? docsRootArg;
-	const manifest = await walkAndGroup(sourceRoot, docsRoot, siteBase);
+	// docsRoot is the Starlight content root (anchors citation URLs).
+	// If the input includes a :path that's a subtree of docsRoot, walk only
+	// that subtree but keep URL construction anchored at the content root.
+	const docsRoot = docsRootArg;
+	const walkSubtree = input.path && input.path !== docsRoot ? input.path : undefined;
+	const manifest = await walkAndGroup(sourceRoot, docsRoot, siteBase, walkSubtree);
 
 	const manifestPath = path.join(workingDir, "manifest.json");
 	await writeFile(manifestPath, JSON.stringify({ ref: defaultRef, ...manifest }, null, 2));

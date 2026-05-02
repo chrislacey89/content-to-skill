@@ -217,6 +217,34 @@ describe("walkAndGroup", () => {
 		}
 	});
 
+	it("walks a subtree but anchors relPath + Manifest.docsRoot to the content root", async () => {
+		// Slice #6 demo regression: when the operator walks a subtree (e.g.,
+		// error-management/) of a larger Starlight content root (docs/), the
+		// manifest's docsRoot must record the CONTENT ROOT and relPaths must be
+		// relative to it. Otherwise buildCitation produces URLs missing the
+		// content-root prefix (`/error-management/` instead of `/docs/error-management/`).
+		const { sourceRoot, docsRoot, cleanup } = makeFixture();
+		try {
+			const contentRoot = path.relative(sourceRoot, docsRoot); // "docs"
+			const walkSubtree = path.join(contentRoot, "error-management");
+			const manifest = await walkAndGroup(
+				sourceRoot,
+				contentRoot,
+				"https://example.com",
+				walkSubtree,
+			);
+			expect(manifest.docsRoot).toBe(contentRoot);
+			expect(manifest.groups.map((g) => g.name).sort()).toEqual(["error-management"]);
+			const relPaths = manifest.groups.flatMap((g) => g.files.map((f) => f.relPath)).sort();
+			expect(relPaths).toEqual([
+				"error-management/expected-errors.mdx",
+				"error-management/unexpected-errors.mdx",
+			]);
+		} finally {
+			cleanup();
+		}
+	});
+
 	it("rejects relPaths that escape docsRoot (defensive walker invariant)", async () => {
 		// Direct property check on the assertion: a file whose computed relPath would
 		// be ..-prefixed (e.g., via a future refactor that follows symlinks or accepts
