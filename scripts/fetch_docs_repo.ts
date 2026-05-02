@@ -232,19 +232,19 @@ export async function walkAndGroup(
 		if (frontmatter.sidebar?.order !== undefined) starlightCount++;
 
 		const relFromDocsRoot = path.relative(docsAbs, abs);
+
+		// Walker invariant: relPath must resolve under docsAbs. path.relative returns
+		// a `..`-prefixed or absolute path when the file lives outside docsAbs (which
+		// can happen via symlink expansion, future walker refactors, or unusual fs
+		// state). The assertion catches those cases at the boundary.
+		if (path.isAbsolute(relFromDocsRoot) || relFromDocsRoot.startsWith("..")) {
+			throw new Error(`Walker invariant violated: ${abs} resolves outside ${docsAbs}`);
+		}
+
 		const firstSeg = relFromDocsRoot.split(path.sep)[0];
 		const isFlat = !relFromDocsRoot.includes(path.sep);
 		const group = isFlat ? "core" : firstSeg;
-
-		// Walker invariant: relPath should start with docsRoot's last segment or be below it
 		const relPathPosix = relFromDocsRoot.split(path.sep).join("/");
-		const docsRootLastSeg = path.basename(docsRootRel);
-		const relPathFromDocsRootParent = `${docsRootLastSeg}/${relPathPosix}`;
-		if (!relPathFromDocsRootParent.startsWith(`${docsRootLastSeg}/`)) {
-			throw new Error(
-				`Walker invariant violated: ${relPathPosix} does not live under ${docsRootLastSeg}`,
-			);
-		}
 
 		docFiles.push({
 			relPath: relPathPosix,

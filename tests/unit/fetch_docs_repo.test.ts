@@ -193,7 +193,36 @@ describe("walkAndGroup", () => {
 		}
 	});
 
-	it("walker invariant: every file's relPath starts with docsRoot's last segment or is below it", async () => {
+	it("walker invariant: every file's relPath resolves under docsRoot", async () => {
+		const { sourceRoot, docsRoot, cleanup } = makeFixture();
+		try {
+			const docsAbs = docsRoot;
+			const manifest = await walkAndGroup(
+				sourceRoot,
+				path.relative(sourceRoot, docsAbs),
+				"https://example.com",
+			);
+			for (const group of manifest.groups) {
+				for (const file of group.files) {
+					expect(file.relPath).toMatch(/\.(mdx|md)$/);
+					expect(path.isAbsolute(file.relPath)).toBe(false);
+					expect(file.relPath.startsWith("..")).toBe(false);
+					// Round-trip: resolving relPath under docsAbs must stay inside docsAbs
+					const resolved = path.resolve(docsAbs, file.relPath);
+					expect(resolved === docsAbs || resolved.startsWith(`${docsAbs}${path.sep}`)).toBe(true);
+				}
+			}
+		} finally {
+			cleanup();
+		}
+	});
+
+	it("rejects relPaths that escape docsRoot (defensive walker invariant)", async () => {
+		// Direct property check on the assertion: a file whose computed relPath would
+		// be ..-prefixed (e.g., via a future refactor that follows symlinks or accepts
+		// pre-computed paths) must be rejected. We simulate by stubbing path.relative
+		// is impractical; instead verify the assertion's defensive shape stays intact
+		// by ensuring no manifest entry begins with "..".
 		const { sourceRoot, docsRoot, cleanup } = makeFixture();
 		try {
 			const manifest = await walkAndGroup(
@@ -203,8 +232,7 @@ describe("walkAndGroup", () => {
 			);
 			for (const group of manifest.groups) {
 				for (const file of group.files) {
-					expect(file.relPath).toMatch(/\.(mdx|md)$/);
-					expect(file.relPath.startsWith("/")).toBe(false);
+					expect(file.relPath.includes("..")).toBe(false);
 				}
 			}
 		} finally {

@@ -3,7 +3,7 @@ name: content-to-skill
 description: "Transforms PDFs, EPUBs, code exercise repositories, and Starlight-format MDX docs sites into Claude Code Agent Skills with library management. Use when converting books, documents, coding courses, or library docs into reusable agent skills."
 argument-hint: "<path-or-github-ref> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel] [--citation chapter|page] [--genre prescriptive|literary-fiction|philosophy|poetry-drama|religious] [--category <category>] [--pattern numbered-dotted|generic|flat-file] [--site-base <url>] [--docs-root <path>]"
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Glob, Task, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*), Bash(pdfimages:*), Bash(pdftoppm:*), Bash(command:*), Bash(wc:*), Bash(gh:*), Bash(tar:*), Bash(curl:*)
+allowed-tools: Read, Write, Edit, Glob, Task, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*), Bash(pdfimages:*), Bash(pdftoppm:*), Bash(command:*), Bash(wc:*), Bash(gh:*), Bash(tar:*)
 ---
 
 # Content to Skill
@@ -1114,14 +1114,11 @@ Example: content/src/content/docs/docs/error-management/expected-errors.mdx + he
 [full contents of docs-extraction-prompt.md inlined here]
 ```
 
-After each group completes, report progress and update `progress.json`:
-```json
-{ "step": "extract", "pipeline": "docs", "lastCompletedGroup": "<group.name>", "status": "in_progress", ... }
-```
+After each group completes, report progress in the conversation. Do **not** write a `lastCompletedGroup` field to `progress.json` — recovery is artifact-driven by design in slice #1 (the recovery preamble scans for non-empty `extraction-*.md` files). Slice #7 introduces a real progress field with a real reader as part of resumability hardening.
 
 After all groups have been extracted, update `progress.json`:
 ```json
-{ "step": "synthesize", "pipeline": "docs", "status": "in_progress", ... }
+{ "step": "synthesize", "pipeline": "docs", "skillName": "<name>", "input": "<raw-github-arg>", "siteBase": "<url>", "docsRoot": "<path>", "citationStyle": "url", "status": "in_progress" }
 ```
 
 ## Step 5D: Synthesize into Skill
