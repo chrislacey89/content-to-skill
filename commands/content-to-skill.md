@@ -1,17 +1,18 @@
 ---
 name: content-to-skill
-description: "Transforms PDFs, EPUBs, and code exercise repositories into Claude Code Agent Skills with library management. Use when converting books, documents, or coding courses into reusable agent skills."
-argument-hint: "<path> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel] [--citation chapter|page] [--genre prescriptive|literary-fiction|philosophy|poetry-drama|religious] [--category <category>] [--pattern numbered-dotted|generic|flat-file]"
+description: "Transforms PDFs, EPUBs, code exercise repositories, and Starlight-format MDX docs sites into Claude Code Agent Skills with library management. Use when converting books, documents, coding courses, or library docs into reusable agent skills."
+argument-hint: "<path-or-github-ref> [--name <skill-name>] [--install library|project|personal] [--on-conflict overwrite|cancel] [--citation chapter|page] [--genre prescriptive|literary-fiction|philosophy|poetry-drama|religious] [--category <category>] [--pattern numbered-dotted|generic|flat-file] [--site-base <url>] [--docs-root <path>]"
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Glob, Task, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*), Bash(pdfimages:*), Bash(pdftoppm:*), Bash(command:*), Bash(wc:*)
+allowed-tools: Read, Write, Edit, Glob, Task, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash(npx:*), Bash(npm:*), Bash(mkdir:*), Bash(ls:*), Bash(cp:*), Bash(rm:*), Bash(pdfimages:*), Bash(pdftoppm:*), Bash(command:*), Bash(wc:*), Bash(gh:*), Bash(tar:*), Bash(curl:*)
 ---
 
 # Content to Skill
 
-Convert a PDF, EPUB, or code exercise repository into a complete Agent Skill package.
+Convert a PDF, EPUB, code exercise repository, or Starlight-format MDX docs repo into a complete Agent Skill package.
 
-**Two pipelines**: This command supports TWO input types. You MUST check whether the input path is a directory or a file FIRST (Step 1), then follow the correct pipeline:
-- **Directory** → Repo Pipeline (Steps 1R–6R)
+**Three pipelines**: This command supports THREE input types. You MUST run pipeline routing FIRST (Step 1) to decide which pipeline to follow:
+- **Input matches `^github:` or `^https?://github.com/`** → Docs Pipeline (Steps 1D–6D)
+- **Directory on disk** → Repo Pipeline (Steps 1R–6R)
 - **PDF/EPUB file** → Book Pipeline (Steps 1–6)
 
 ## Arguments
@@ -20,7 +21,7 @@ Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the 
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `<path>` | (required) | Path to a PDF/EPUB file **or** a directory containing code exercises |
+| `<path-or-ref>` | (required) | Path to a PDF/EPUB file, directory of code exercises, **or** GitHub ref (`github:owner/repo[#ref][:path]` or `https://github.com/owner/repo[/tree/<ref>/<path>]`) |
 | `--name <name>` | (prompt user) | Kebab-case skill name (max 64 chars, lowercase alphanumeric + hyphens) |
 | `--install <location>` | `library` | `library`, `project`, or `personal` |
 | `--on-conflict <action>` | `overwrite` | `overwrite` or `cancel` |
@@ -29,6 +30,8 @@ Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the 
 | `--genre <type>` | (prompt user) | `prescriptive`, `literary-fiction`, `philosophy`, `poetry-drama`, or `religious` — skip genre prompt (book pipeline only) |
 | `--category <category>` | (prompt user) | Category for library (e.g., `business`, `technical`) — skip category confirmation |
 | `--pattern <name>` | (auto-detect) | Exercise detector pattern: `numbered-dotted`, `generic`, `flat-file` (repo pipeline only) |
+| `--site-base <url>` | (required for docs) | Base URL of the rendered docs site (e.g., `https://effect.website`). Used to construct citations. Docs pipeline only. |
+| `--docs-root <path>` | `docs/` | Repo-relative path to the docs subtree to walk (e.g., `content/src/content/docs/docs`). Docs pipeline only. |
 
 ## Pipeline Progress Checklist
 
@@ -59,26 +62,41 @@ Copy the appropriate checklist and update as you complete each step.
 - [ ] Step 6R: Install skill
 ```
 
+**Docs Pipeline** (Starlight-format MDX docs repo):
+```
+- [ ] Step 1D: Validate input and setup
+- [ ] Step 2D: Fetch repo tarball
+- [ ] Step 3D: Walk and group MDX files
+- [ ] Step 4D: Extract content (serial in slice #1; parallel in slice #2)
+- [ ] Step 5D: Synthesize into skill
+- [ ] Step 6D: book.json + cover + install
+```
+
 ## Recovery Preamble
 
 If you have lost context (e.g., after compaction), reconstruct state by reading these files from the working directory:
 
-1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and batch you were on, and the `pipeline` field (`"book"` or `"repo"`)
-2. If `pipeline` is `"repo"`, follow the **Repo Pipeline** steps (1R-6R). Check for `extraction-*.md` files to determine extraction progress.
-3. If `pipeline` is `"book"` (or absent — legacy), follow the **Book Pipeline**:
+1. Read `/tmp/content-to-skill/<name>/progress.json` — tells you which step and batch you were on, and the `pipeline` field (`"book"`, `"repo"`, or `"docs"`)
+2. If `pipeline` is `"docs"`, follow the **Docs Pipeline** steps (1D-6D):
+   - Read `/tmp/content-to-skill/<name>/manifest.json` — group/file ordering and frontmatter for Steps 4D-5D
+   - Check for `extraction-*.md` files to determine which groups have already been extracted; in slice #1 extraction is serial and any group whose artifact exists and is non-empty is complete
+   - Carry `siteBase`, `docsRoot`, and `citationStyle: "url"` forward in any new `progress.json` writes
+3. If `pipeline` is `"repo"`, follow the **Repo Pipeline** steps (1R-6R). Check for `extraction-*.md` files to determine extraction progress.
+4. If `pipeline` is `"book"` (or absent — legacy), follow the **Book Pipeline**:
    - Check `citationStyle` — if missing and step is `"citation-style"`, resume at Step 1.5; `confirmedCategory` should also be set by the end of Step 1.5
    - Read `/tmp/content-to-skill/<name>/running-context.md` — the extraction state (built by Pass 2)
    - Read `/tmp/content-to-skill/<name>/book-spine.md` — chapter summaries (built by Pass 2)
    - Check for `distilled-chunk-*.md` files — if present, Pass 3 has started or completed
-4. Resume from the last completed batch or step
+5. Resume from the last completed batch or step
 
 ## Step 1: Validate Input and Setup
 
-1. Parse `$ARGUMENTS` to extract the input path and optional flags
-2. **CRITICAL — Check whether the path is a directory or a file BEFORE doing anything else**:
-   - Use `Bash(ls:*)` to check: `ls -la "<path>"`
-   - **If it is a DIRECTORY** → jump to **Step 1R** (Repo Pipeline). Do NOT continue with the book pipeline steps below.
-   - **If it is a FILE** with `.pdf` or `.epub` extension → continue with Step 3 below (Book Pipeline)
+1. Parse `$ARGUMENTS` to extract the input and optional flags
+2. **CRITICAL — Pipeline Routing. Decide which pipeline to run BEFORE doing anything else**:
+   - **If the input matches `^github:` or `^https?://github.com/`** → jump to **Step 1D** (Docs Pipeline). Do NOT touch the filesystem; the docs pipeline downloads the repo over HTTP.
+   - Otherwise, treat the input as a filesystem path and use `Bash(ls:*)` to check: `ls -la "<path>"`
+     - **If it is a DIRECTORY** → jump to **Step 1R** (Repo Pipeline). Do NOT continue with the book pipeline steps below.
+     - **If it is a FILE** with `.pdf` or `.epub` extension → continue with Step 3 below (Book Pipeline)
    - If not found or unrecognized type, report a clear error and stop
 3. Get the skill name:
    - If `--name` was provided, validate it: lowercase, alphanumeric + hyphens, max 64 chars, no leading/trailing/consecutive hyphens
@@ -969,3 +987,275 @@ Follow the exact same installation process as the book pipeline's Step 6:
    ```json
    { "step": "complete", "pipeline": "repo", "status": "complete", "installedTo": "<target_dir>", "installType": "library|project|personal" }
    ```
+
+---
+
+# Docs Pipeline (Starlight MDX Docs Repo)
+
+When Step 1's pipeline routing matches `^github:` or `^https?://github.com/`, use this pipeline instead of the book or repo pipelines.
+
+This pipeline targets **Starlight-format MDX docs** (e.g., `effect.website`, sites built with [`@astrojs/starlight`](https://starlight.astro.build/)). The Starlight precondition is that at least one file under `<docs-root>` carries a `sidebar.order` value in its YAML frontmatter — Step 3D fails clearly when this is absent.
+
+This is **slice #1 (tracer)**: extraction is serial, no resumability, no auto-split when reference files exceed 500 lines, no spot-check verification, no Step 7D quality check. Those harden in slices #2–#4.
+
+## Step 1D: Validate Input and Setup
+
+1. Parse `$ARGUMENTS` for `--name`, `--site-base`, `--docs-root`, `--install`, `--on-conflict`. The first positional argument is the GitHub input (`github:owner/repo[#ref][:path]` or `https://github.com/owner/repo[/tree/<ref>/<path>]`).
+2. **Required preconditions** — fail clearly with the remediation hint if any are missing:
+   - `gh auth status` returns 0. If not, fail with: `gh CLI is not authenticated. Run 'gh auth login' and retry.`
+   - `command -v tar` returns 0. If not, fail with: `tar binary not found on PATH. Docs pipeline v1 requires tar.`
+   - `--site-base` is provided (no default). If not, fail with: `Docs pipeline requires --site-base <url> for citation construction (e.g., --site-base https://effect.website).`
+3. **Default `--docs-root` to `docs/` if not provided.**
+4. Get the skill name:
+   - If `--name` was provided, validate it (lowercase, alphanumeric + hyphens, max 64 chars)
+   - If not provided, ask the user: "What should this skill be called? Use a kebab-case slug (e.g., `effect-ts`, `astro-docs`, `effect-error-mgmt`)."
+5. Create the working directory:
+   ```
+   mkdir -p /tmp/content-to-skill/<name>
+   ```
+6. Verify Node.js dependencies are installed:
+   ```
+   npm --prefix ${CLAUDE_PLUGIN_ROOT} ls 2>/dev/null || npm install --prefix ${CLAUDE_PLUGIN_ROOT}
+   ```
+7. Write initial `progress.json`:
+   ```json
+   {
+     "step": "fetch",
+     "pipeline": "docs",
+     "skillName": "<name>",
+     "input": "<raw-github-arg>",
+     "siteBase": "<url>",
+     "docsRoot": "<path>",
+     "citationStyle": "url",
+     "status": "in_progress"
+   }
+   ```
+
+## Step 2D: Fetch Repo Tarball
+
+Run the fetch + walk script — it downloads the tarball, extracts it, then walks the docs tree and writes `manifest.json`. (Step 3D is folded into the same invocation.)
+
+```
+npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_docs_repo.ts \
+  --input "<raw-github-arg>" \
+  --working-dir /tmp/content-to-skill/<name> \
+  --site-base "<site-base>" \
+  --docs-root "<docs-root>"
+```
+
+The script:
+- Calls `gh api repos/<owner>/<repo>/tarball/<ref>` and pipes to a tarball file
+- Extracts to `/tmp/content-to-skill/<name>/source/` with `tar -xzf ... --strip-components=1`
+- Walks the docs subtree, parses YAML frontmatter, groups by first path segment, sorts by `sidebar.order` then filename
+- Writes `/tmp/content-to-skill/<name>/manifest.json`
+
+If the script exits non-zero with `Starlight-format MDX` in the error, this is a **Step 3D failure**: the input does not have any file with `sidebar.order` frontmatter. Report the error verbatim and stop.
+
+Update `progress.json`:
+```json
+{ "step": "extract", "pipeline": "docs", "status": "in_progress", ... }
+```
+
+## Step 3D: Walk + Group
+
+This step is performed inside the same `fetch_docs_repo.ts` invocation as Step 2D — the manifest is already written. Read it to confirm:
+
+```
+Read /tmp/content-to-skill/<name>/manifest.json
+```
+
+Report: "Walked N groups containing M files."
+
+## Step 4D: Extract Content (Serial in Slice #1)
+
+Read the extraction methodology ONCE and capture its full contents:
+```
+Read ${CLAUDE_PLUGIN_ROOT}/references/docs-extraction-prompt.md
+```
+
+Store the contents of `docs-extraction-prompt.md` in memory — you will inline it into every subagent prompt.
+
+In slice #1, extraction is **serial**: spawn one subagent at a time per group. (Slice #2 hardens this with parallel batches and resumability.)
+
+For each group in the manifest order, spawn one subagent via `Task` with `subagent_type: "general-purpose"` (do NOT pass a `model` parameter):
+
+**Subagent prompt template**:
+
+```
+You are extracting Starlight-format MDX documentation for a coding skill.
+
+## Task
+1. Read every file in this group, in order:
+   {group.files (absolute paths under /tmp/content-to-skill/<name>/source/<docsRoot>)}
+2. Apply the extraction methodology below to produce a structured extraction.
+3. Write your extraction to: /tmp/content-to-skill/<name>/extraction-{group.name}.md
+4. Return a one-line summary: "Group {group.name}: extracted N files, M code blocks preserved, K citations emitted."
+
+## Group Metadata
+- Name: {group.name}
+- Site base: {manifest.siteBase}
+- Docs root: {manifest.docsRoot}
+- Files: {group.files (rel paths + frontmatter title)}
+
+## Citation Construction
+For every citation, the URL must be constructed by `scripts/build_citation.ts`. Format:
+  <site-base>/<docsRoot-last-segment>/<rel-path-without-extension>/#<heading-slug>
+Example: content/src/content/docs/docs/error-management/expected-errors.mdx + heading "Catching Tagged Errors"
+  → https://effect.website/docs/error-management/expected-errors/#catching-tagged-errors
+
+## Hard Constraints
+- Code blocks must be character-perfect verbatim
+- Preserve twoslash markers (`twoslash`, `// @errors:`, `//   ^?`)
+- Rewrite relative `/docs/...` links to absolute `<site-base>` URLs
+- Capture all `<Aside>` / `:::tip` / "X vs Y" / rules-of-thumb sections
+- Never fabricate; flag uncertainty with [UNCLEAR: reason]
+
+## Extraction Methodology
+[full contents of docs-extraction-prompt.md inlined here]
+```
+
+After each group completes, report progress and update `progress.json`:
+```json
+{ "step": "extract", "pipeline": "docs", "lastCompletedGroup": "<group.name>", "status": "in_progress", ... }
+```
+
+After all groups have been extracted, update `progress.json`:
+```json
+{ "step": "synthesize", "pipeline": "docs", "status": "in_progress", ... }
+```
+
+## Step 5D: Synthesize into Skill
+
+Spawn ONE subagent via `Task` with `subagent_type: "general-purpose"`.
+
+**Subagent prompt**:
+
+```
+You are synthesizing per-group MDX docs extractions into a production-ready skill package.
+
+## Task
+1. Read the manifest: /tmp/content-to-skill/<name>/manifest.json
+2. Use Glob to find all extraction files: /tmp/content-to-skill/<name>/extraction-*.md
+3. Read each extraction file in manifest group order
+4. Create reference files:
+   - mkdir -p /tmp/content-to-skill/<name>/skill/references
+   - One reference file per group: references/<group-name>.md
+   - **Slice #1 does NOT auto-split files larger than 500 lines.** If a group exceeds 500 lines, leave it as a single file and note the size in the synthesis report. (Slice #3 adds the auto-split.)
+   - Reference file frontmatter:
+     ---
+     title: "<Group Title>"
+     impact: "HIGH"
+     tags: [<tag1>, <tag2>, <tag3>]
+     citationStyle: "url"
+     ---
+   - Body: the extraction-<group>.md content (verbatim).
+
+5. Create SKILL.md:
+   - Write to /tmp/content-to-skill/<name>/skill/SKILL.md
+   - Frontmatter:
+     ---
+     name: <name>
+     description: "[One-sentence when-to-use description for this docs site]"
+     ---
+   - Level 1 (30-second): "When to load this skill" + "Top-level sections" table
+   - Level 2 (situational): "I need to..." table linking out to references/
+   - Level 3 (conceptual): A-Z index of group names with one-line descriptions
+   - All References: table of all reference files with size + description
+   - Use relative paths: references/filename.md
+   - Use tables and lists, not prose
+
+6. Self-verify:
+   - All reference files linked in SKILL.md exist
+   - All relative paths correct
+   - Every code block in every reference file matches a code block in some extraction-*.md file (sample 2-3 to spot-check)
+   - Fix any issues
+
+7. Return: "Synthesis complete. Created N reference files (largest M lines) and SKILL.md."
+```
+
+Wait for synthesis to complete. Update `progress.json`:
+```json
+{ "step": "install", "pipeline": "docs", "status": "in_progress", ... }
+```
+
+## Step 6D: book.json + Cover + Install
+
+1. Read `/tmp/content-to-skill/<name>/skill/SKILL.md` to get the description from frontmatter
+2. Read `/tmp/content-to-skill/<name>/manifest.json` for source metadata
+
+3. **If `confirmedCategory` already exists in `progress.json`** (from `--category` flag), use it. Otherwise default to `software-engineering` for docs sites unless the user has already overridden it via the flag. (Asking is unnecessary for docs of a coding library.)
+
+4. Collect all reference filenames from `/tmp/content-to-skill/<name>/skill/references/`
+5. Write `/tmp/content-to-skill/<name>/skill/book.json`:
+   ```json
+   {
+     "name": "<name>",
+     "title": "<Library / Site Title>",
+     "author": null,
+     "year": null,
+     "category": "<confirmed category>",
+     "tags": ["<tag1>", "<tag2>", "..."],
+     "description": "<One-sentence from SKILL.md frontmatter>",
+     "referenceFiles": ["references/<group-1>.md", "..."],
+     "citationStyle": "url",
+     "siteBase": "<site-base>",
+     "sourceRepo": "<owner>/<repo>@<ref>"
+   }
+   ```
+   - Infer `title` from the site or the repo name (e.g., `Effect-TS Documentation`).
+   - Infer `tags` from group names (3-7 kebab-case tags).
+
+6. Generate the cover programmatically (no Goodreads/Open Library lookup for software libraries):
+   ```
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/generate_covers.ts --dir /tmp/content-to-skill/<name>/skill
+   ```
+   If this fails or `generate_covers.ts` doesn't support `--dir`, use `fetch_cover.ts` which falls back to programmatic generation:
+   ```
+   npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/fetch_cover.ts --dir /tmp/content-to-skill/<name>/skill
+   ```
+   Verify `cover.png` exists and `book.json` has `coverImage` and `coverSource`.
+
+7. Install the skill (same logic as Step 6 / Step 6R):
+   - Get install location from `--install` flag (default: `library` → `~/.claude/library/books/<name>/`)
+   - Check for conflicts (respect `--on-conflict`)
+   - `mkdir -p <target_dir>` and `cp -r /tmp/content-to-skill/<name>/skill/* <target_dir>/`
+   - If installing to `library`, rebuild the index:
+     ```
+     npx tsx ${CLAUDE_PLUGIN_ROOT}/scripts/library_index.ts
+     ```
+
+8. Verify installation (SKILL.md, references/, book.json, cover.png).
+
+9. Write `result.json`:
+   ```json
+   {
+     "status": "success",
+     "skill_name": "<name>",
+     "installed_to": "<target_dir>",
+     "install_type": "library|project|personal",
+     "files_created": N,
+     "groups_processed": M,
+     "site_base": "<site-base>",
+     "source_repo": "<owner>/<repo>@<ref>",
+     "working_directory": "/tmp/content-to-skill/<name>/"
+   }
+   ```
+
+10. Report success:
+
+    For `library` installs:
+    > Skill "<name>" added to your library at `<target_dir>`.
+    >
+    > Extracted from M docs sections at `<site-base>`. Contains N reference files.
+    > Use `/library <name>` to load it into any conversation.
+
+    For `project` or `personal` installs:
+    > Skill "<name>" installed to `<target_dir>`.
+    >
+    > Extracted from M docs sections at `<site-base>`. Contains N reference files.
+    > Try it out by asking a question related to the docs.
+
+11. Update `progress.json`:
+    ```json
+    { "step": "complete", "pipeline": "docs", "status": "complete", "installedTo": "<target_dir>", "installType": "library|project|personal" }
+    ```
