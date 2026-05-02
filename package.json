@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "fast-xml-parser": "^5.3.5",
+    "github-slugger": "^2.0.0",
     "html-to-text": "^9.0.5",
     "jszip": "^3.10.1",
     "pdf-lib": "^1.17.1",
