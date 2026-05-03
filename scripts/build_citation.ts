@@ -39,3 +39,21 @@ export function buildCitation(
 
 	return url;
 }
+
+const isMain = (() => {
+	try {
+		return import.meta.url === `file://${process.argv[1]}`;
+	} catch {
+		return false;
+	}
+})();
+
+if (isMain) {
+	const [filePath, headingArg, siteBase, docsRoot] = process.argv.slice(2);
+	if (!filePath || !siteBase || !docsRoot) {
+		console.error("Usage: build_citation.ts <filePath> <heading|''> <siteBase> <docsRoot>");
+		process.exit(1);
+	}
+	const heading = headingArg === "" ? null : headingArg;
+	console.log(buildCitation(filePath, heading, siteBase, docsRoot));
+}

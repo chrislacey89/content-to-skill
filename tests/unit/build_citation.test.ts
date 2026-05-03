@@ -147,4 +147,19 @@ describe("buildCitation — edge cases", () => {
 			"https://example.com/docs/intro/#welcome",
 		);
 	});
+
+	// Regression: slice #6 demo command surfaced this. When the operator passes the
+	// Starlight content root as --docs-root and walks a subtree (via input :path),
+	// buildCitation must keep the URL anchored at the content root, not the subtree.
+	it("uses Starlight content root for URL when walking a subtree", () => {
+		expect(
+			buildCitation(
+				"content/src/content/docs/docs/error-management/expected-errors.mdx",
+				"Catching All Errors",
+				"https://effect.website",
+				// docsRoot is the Starlight content root, NOT the walk subtree
+				"content/src/content/docs/docs",
+			),
+		).toBe("https://effect.website/docs/error-management/expected-errors/#catching-all-errors");
+	});
 });
