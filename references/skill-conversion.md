@@ -14,9 +14,7 @@ A skill package consists of:
 ├── images/               # Source images extracted from the document (optional)
 │   ├── figure-1.png
 │   └── ...
-├── diagrams/             # Excalidraw diagrams (fallback/supplement, optional)
-│   └── framework.excalidraw
-└── references/
+└── references/           # Mermaid diagrams (fallback/supplement) are embedded inline in these files
     ├── core-framework.md  # 8-15 reference files
     ├── ...
     └── rules-of-thumb.md
@@ -109,7 +107,7 @@ chapter: [chapter number or range]
 ![<descriptive caption explaining what the figure shows>](../images/<filename>)
 *Source: [Book Title], <citation>*
 
-[OPTIONAL — include this section only if a source image was embedded for this concept in Step 5a. If no source image exists and a diagram would help, request an Excalidraw diagram instead (Step 5c). Do not include this section if empty.]
+[OPTIONAL — include this section only if a source image was embedded for this concept in Step 5a. If no source image exists and a diagram would help, generate an inline Mermaid diagram instead (Step 5c). Do not include this section if empty.]
 
 ## Rules of Thumb
 
@@ -169,12 +167,12 @@ The template above is the universal structure. Each section should be *interpret
 - Never fabricate content not in the source extraction
 - Every direct quote (text in quotation marks attributed to the author) must include a citation — chapter number, page number, or structural locator. No exceptions.
 
-### Visuals: Source Images vs Excalidraw
+### Visuals: Source Images vs Mermaid
 
 **Prefer actual source images over generated diagrams.** The author designed their figures to communicate the concept — use them when available.
 
 - If an image was extracted from the source document for this concept (Step 5a), embed it in the `## Figure` section using a relative path: `../images/<filename>`
-- Only request an Excalidraw diagram (Step 5c) if no source image covers the concept, or as a supplement when the source image is partial or unclear
+- Only generate a Mermaid diagram (Step 5c) if no source image covers the concept, or as a supplement when the source image is partial or unclear. Mermaid diagrams are written inline as ` ```mermaid ` fenced blocks in the reference file — no separate files or rendering.
 - The `## Figure` section is optional — only include it when an actual image is embedded. Do not leave it empty or with placeholder text.
 
 ## Step 3: Create SKILL.md
@@ -274,8 +272,7 @@ Create a `book.json` metadata file for library indexing. This file enables the `
   "tags": ["political-strategy", "leadership", "power-dynamics", "realpolitik"],
   "description": "Machiavelli's political realism framework for power acquisition, retention, and leadership strategy.",
   "referenceFiles": ["references/core-framework.md", "references/rules-of-thumb.md"],
-  "images": ["images/figure-1.png"],
-  "diagrams": ["diagrams/moral-inversion.excalidraw"]
+  "images": ["images/figure-1.png"]
 }
 ```
 
@@ -292,7 +289,6 @@ Create a `book.json` metadata file for library indexing. This file enables the `
 | `description` | Yes | One-sentence description (reuse from SKILL.md frontmatter) |
 | `referenceFiles` | No | Array of relative paths to all reference files |
 | `images` | No | Array of relative paths to source images embedded in references (added by Step 5a) |
-| `diagrams` | No | Array of relative paths to Excalidraw diagram files (added by Step 5c) |
 
 ### How to Generate
 
