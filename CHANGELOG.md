@@ -17,7 +17,9 @@ Releases prior to 1.8.0 are not itemized here.
   no extra toolchain.
 - **Bundled skill swapped from `excalidraw-diagram` to `mermaid`** in `plugin.json`. The
   Mermaid skill ships strict per-type syntax references for 23 diagram types plus a
-  GitHub-contrast guide, and the conversion pipeline reads them when generating diagrams.
+  GitHub-contrast guide. Step 5c invokes `/mermaid` to generate each diagram rather than
+  paraphrasing its workflow, keeping the skill as the single source of truth for diagram
+  syntax and verification.
 
 ### Removed
 

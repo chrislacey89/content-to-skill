@@ -565,17 +565,14 @@ Mermaid diagrams are generated **only** for concepts that don't already have a s
    - **Supplement mode**: If a source image exists but is low-quality or partial, a Mermaid diagram may supplement it — keep it focused on what the original doesn't show
    - **Limit**: 0–2 diagrams per skill (quality over quantity)
 
-3. **Generate Mermaid source** using the bundled `mermaid` skill at `${CLAUDE_PLUGIN_ROOT}/skills/mermaid`. For each selected framework:
+3. **Generate the diagram by invoking the bundled `mermaid` skill** (`/mermaid`) — do not hand-write or paraphrase Mermaid syntax. The skill is the single source of truth: it owns diagram-type selection, the strict per-type syntax references, and the parse verification. Re-describing its workflow here would only drift from it. For each selected framework, invoke `/mermaid` with:
+   - the concept and the relationship to show (e.g. "decision tree for X", "feedback loop between Y and Z") so it can pick the diagram type,
+   - the constraint that the diagram must stay legible in both light and dark GitHub themes (the skill's `references/contrast-for-github.md`),
+   - a focus instruction — a handful of semantically-named nodes that argue the structure, not an exhaustive dump.
 
-   a. **Map the concept to a diagram type** (flowchart for processes/decision trees, `stateDiagram` for feedback loops, `classDiagram`/`erDiagram` for structure, `quadrantChart` for 2×2 matrices, etc.). See the type table in `${CLAUDE_PLUGIN_ROOT}/skills/mermaid/SKILL.md`.
+   Take the verified ` ```mermaid ` block the skill returns.
 
-   b. **Read the matching syntax reference** under `${CLAUDE_PLUGIN_ROOT}/skills/mermaid/references/<type>.md` before writing code — Mermaid syntax is strict and version-sensitive. Also read `references/contrast-for-github.md` so the diagram stays legible in both light and dark GitHub themes.
-
-   c. **Write the diagram** as a fenced ` ```mermaid ` block. Use semantic node IDs (`MoralInversion`, not `A`), readable labels, and a direction/layout hint matching the diagram's purpose (`flowchart TD` for top-down decision trees, `flowchart LR` for pipelines). Keep it focused — a handful of nodes that argue the structure, not an exhaustive dump.
-
-4. **Verify** (no renderer needed): check the block against the parse-pitfalls table in the mermaid skill's `## Verification` section — balanced brackets/quotes, no reserved-word node IDs, labels with special characters quoted, valid arrow syntax for the chosen type. Fix any issues in place.
-
-5. **Embed in the reference file**: In the reference file where the concept lives, append the diagram inline:
+4. **Embed in the reference file**: In the reference file where the concept lives, append the returned diagram inline:
    ````markdown
    ## Diagram
 
@@ -585,9 +582,9 @@ Mermaid diagrams are generated **only** for concepts that don't already have a s
    ```
    ````
 
-6. **Update SKILL.md**: If any source images (Step 5a) or Mermaid diagrams were created, add a `**Key Visuals**` line to Level 1.
+5. **Update SKILL.md**: If any source images (Step 5a) or Mermaid diagrams were created, add a `**Key Visuals**` line to Level 1.
 
-7. Update `progress.json` (set `"step": "fetching-cover"` if not already done).
+6. Update `progress.json` (set `"step": "fetching-cover"` if not already done).
 
 ## Step 5b: Fetch Cover Image
 
