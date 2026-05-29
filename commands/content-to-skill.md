@@ -576,14 +576,14 @@ Mermaid diagrams are generated **only** for concepts that don't already have a s
 4. **Verify** (no renderer needed): check the block against the parse-pitfalls table in the mermaid skill's `## Verification` section — balanced brackets/quotes, no reserved-word node IDs, labels with special characters quoted, valid arrow syntax for the chosen type. Fix any issues in place.
 
 5. **Embed in the reference file**: In the reference file where the concept lives, append the diagram inline:
-   ```markdown
+   ````markdown
    ## Diagram
 
    ```mermaid
    flowchart TD
      ...
    ```
-   ```
+   ````
 
 6. **Update SKILL.md**: If any source images (Step 5a) or Mermaid diagrams were created, add a `**Key Visuals**` line to Level 1.
 
