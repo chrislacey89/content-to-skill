@@ -95,7 +95,7 @@ Two pipelines depending on input type:
 4. **Cross-Reference** — A dedicated pass builds a unified knowledge map, terminology index, and chapter spine
 5. **Distill** — Each chunk is re-evaluated against the whole book. Surface observations are cut, causal chains deepened
 6. **Synthesize** — Produces EXTRACTION_SUMMARY.md with metadata, core thesis, and cross-reference map
-7. **Convert** — Structured skill with 3-level progressive disclosure and 8-15 reference files
+7. **Convert** — Structured skill with 3-level progressive disclosure and 8-15 reference files. Concepts without a source figure get an inline [Mermaid](https://mermaid.js.org/) diagram that renders natively on GitHub and in VS Code
 8. **Cover** — Fetches real cover art from Goodreads and Open Library, or generates one
 9. **Install** — Adds to your personal library, project, or personal skills
 

@@ -47,7 +47,7 @@ Copy the appropriate checklist and update as you complete each step.
 - [ ] Step 4: Synthesize
 - [ ] Step 5: Convert to skill (includes book.json)
 - [ ] Step 5a: Select and embed source images
-- [ ] Step 5c: Generate diagrams (Excalidraw fallback/supplement)
+- [ ] Step 5c: Generate diagrams (Mermaid fallback/supplement)
 - [ ] Step 5b: Fetch cover image
 - [ ] Step 6: Install skill
 ```
@@ -517,7 +517,7 @@ Follow the instructions in `skill-conversion.md` to:
 
 ## Step 5a: Select and Embed Source Images
 
-Use actual images extracted from the source document in the skill's reference files. This step runs before Excalidraw generation — concepts with a source image don't need a diagram.
+Use actual images extracted from the source document in the skill's reference files. This step runs before Mermaid generation — concepts with a source image don't need a diagram.
 
 1. **Check for extracted images**:
    ```bash
@@ -549,82 +549,45 @@ Use actual images extracted from the source document in the skill's reference fi
    "images": ["images/figure-1.png", "images/figure-2.png"]
    ```
 
-7. **Note coverage**: Record which reference file concepts now have source images — Step 5c uses this to skip Excalidraw for covered concepts.
+7. **Note coverage**: Record which reference file concepts now have source images — Step 5c uses this to skip Mermaid generation for covered concepts.
 
 If no images match any reference file concept, note this and proceed to Step 5c.
 
-## Step 5c: Generate Diagrams (Excalidraw Fallback/Supplement)
+## Step 5c: Generate Diagrams (Mermaid Fallback/Supplement)
 
-Excalidraw diagrams are generated **only** for concepts that don't already have a source image from Step 5a. The goal is to fill visual gaps, not duplicate what the book already shows.
+Mermaid diagrams are generated **only** for concepts that don't already have a source image from Step 5a. The goal is to fill visual gaps, not duplicate what the book already shows. Mermaid is plain text embedded directly in the reference Markdown — it renders natively in GitHub, VS Code, and other Mermaid-aware viewers, with no renderer, no image files, and no extra toolchain.
 
 1. **Check Step 5a coverage**: List which reference file concepts already have an embedded source image (`## Figure` section present).
 
-2. **Select Excalidraw candidates**: From the remaining uncovered concepts, identify frameworks/models that are best expressed visually:
+2. **Select Mermaid candidates**: From the remaining uncovered concepts, identify frameworks/models that are best expressed visually:
    - **Good candidates**: step-by-step processes, hierarchies, 2×2 matrices, causal chains, decision trees, feedback loops
    - **Skip if**: the book is primarily narrative/philosophical with no structural frameworks, or all key concepts already have source images
-   - **Supplement mode**: If a source image exists but is low-quality or partial, an Excalidraw diagram may supplement it — keep it focused on what the original doesn't show
+   - **Supplement mode**: If a source image exists but is low-quality or partial, a Mermaid diagram may supplement it — keep it focused on what the original doesn't show
    - **Limit**: 0–2 diagrams per skill (quality over quantity)
 
-3. **Generate Excalidraw JSON**: For each selected framework, write a valid Excalidraw file to:
-   `/tmp/content-to-skill/<name>/skill/diagrams/<framework-kebab-name>.excalidraw`
+3. **Generate Mermaid source** using the bundled `mermaid` skill at `${CLAUDE_PLUGIN_ROOT}/skills/mermaid`. For each selected framework:
 
-   Minimum valid format:
-   ```json
-   {
-     "type": "excalidraw",
-     "version": 2,
-     "source": "content-to-skill",
-     "elements": [ ... ],
-     "appState": { "viewBackgroundColor": "#ffffff" }
-   }
-   ```
-   Use simple shapes only (rectangles, diamonds, arrows, text). Keep to 5–15 elements. Follow the Excalidraw element schema (type, id, x, y, width, height, strokeColor, backgroundColor, text, etc.).
+   a. **Map the concept to a diagram type** (flowchart for processes/decision trees, `stateDiagram` for feedback loops, `classDiagram`/`erDiagram` for structure, `quadrantChart` for 2×2 matrices, etc.). See the type table in `${CLAUDE_PLUGIN_ROOT}/skills/mermaid/SKILL.md`.
 
-4. **Render & Validate** (up to 4 iterations):
+   b. **Read the matching syntax reference** under `${CLAUDE_PLUGIN_ROOT}/skills/mermaid/references/<type>.md` before writing code — Mermaid syntax is strict and version-sensitive. Also read `references/contrast-for-github.md` so the diagram stays legible in both light and dark GitHub themes.
 
-   > **One-time setup** (if Playwright/Chromium not yet installed):
-   > ```bash
-   > cd ${CLAUDE_PLUGIN_ROOT}/skills/excalidraw-diagram/references
-   > uv run playwright install chromium
-   > ```
+   c. **Write the diagram** as a fenced ` ```mermaid ` block. Use semantic node IDs (`MoralInversion`, not `A`), readable labels, and a direction/layout hint matching the diagram's purpose (`flowchart TD` for top-down decision trees, `flowchart LR` for pipelines). Keep it focused — a handful of nodes that argue the structure, not an exhaustive dump.
 
-   For each `.excalidraw` file written:
+4. **Verify** (no renderer needed): check the block against the parse-pitfalls table in the mermaid skill's `## Verification` section — balanced brackets/quotes, no reserved-word node IDs, labels with special characters quoted, valid arrow syntax for the chosen type. Fix any issues in place.
 
-   a. **Render** to PNG:
-      ```bash
-      cd ${CLAUDE_PLUGIN_ROOT}/skills/excalidraw-diagram/references
-      uv run python render_excalidraw.py /tmp/content-to-skill/<name>/skill/diagrams/<name>.excalidraw
-      ```
-      The PNG is written alongside the `.excalidraw` file.
-
-   b. **View** the PNG to visually inspect it.
-
-   c. **Audit** against these criteria:
-      - No text clipping or overflow
-      - No overlapping elements
-      - Arrows route cleanly between nodes
-      - Visual structure matches conceptual structure (shapes argue, not just label)
-      - Eye flow is correct for the diagram type (left→right, top→bottom, convergence for aggregation)
-      - Spacing is consistent and composition is balanced
-
-   d. **Fix**: If any issues are found, edit the JSON in place to address them.
-
-   e. **Repeat** from (a) up to 4 cycles total. Stop when: diagram matches design intent, no visual defects, would show it without caveats.
-
-5. **Update reference file**: In the relevant reference file, append:
+5. **Embed in the reference file**: In the reference file where the concept lives, append the diagram inline:
    ```markdown
    ## Diagram
-   [View diagram: diagrams/<framework-kebab-name>.excalidraw]
+
+   ```mermaid
+   flowchart TD
+     ...
+   ```
    ```
 
-6. **Update SKILL.md**: If any source images (Step 5a) or Excalidraw diagrams were created, add a `**Key Visuals**` line to Level 1.
+6. **Update SKILL.md**: If any source images (Step 5a) or Mermaid diagrams were created, add a `**Key Visuals**` line to Level 1.
 
-7. **Update book.json**: If Excalidraw diagrams were created, add (or merge with existing `images` field):
-   ```json
-   "diagrams": ["diagrams/<name>.excalidraw"]
-   ```
-
-8. Update `progress.json` (set `"step": "fetching-cover"` if not already done).
+7. Update `progress.json` (set `"step": "fetching-cover"` if not already done).
 
 ## Step 5b: Fetch Cover Image
 

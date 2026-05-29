@@ -1,6 +1,6 @@
 {
   "name": "content-to-skill",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Transform PDFs, EPUBs, and code exercise repositories into Claude Code Agent Skills with library management.",
   "author": {
     "name": "Christopher Lacey"
@@ -9,6 +9,6 @@
   "repository": "https://github.com/chrislacey89/content-to-skill",
   "keywords": ["pdf", "epub", "skills", "knowledge", "extraction", "books", "library", "code", "exercises", "repository"],
   "skills": [
-    "./skills/excalidraw-diagram"
+    "./skills/mermaid"
   ]
 }
