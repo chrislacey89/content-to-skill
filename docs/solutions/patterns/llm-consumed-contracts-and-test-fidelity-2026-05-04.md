@@ -48,7 +48,7 @@ Two interacting causes:
 
 - **Applies when:** A slash command's subagent prompt body describes an algorithm that is also implemented as a TS function in `scripts/`. This is the *normal* shape in this repo — book Pipeline (Pass 1/2/3 prompts + chunker), repo Pipeline (Step 2R prompt + extractors), docs Pipeline (Steps 4D/5D prompts + build_citation/fetch_docs_repo). Any future slice that adds a new algorithm in a similar dual-consumer position should follow the rule below.
 - **Inverts or does not apply when:** The contract has only one consumer — either pure TS code (no LLM ever reads the prose recipe) or pure LLM prose (no code path ever invokes the function). For pure-code contracts, standard test discipline catches drift. For pure-prose contracts, the function is dead weight and should be deleted.
-- **Sibling docs:** None yet. Slice-#7+ work should add adjacent entries when the parallel-extraction or auto-split contracts surface their own dual-consumer questions.
+- **Sibling docs:** [`prose-recipe-invokes-skill-not-paraphrase-2026-05-29.md`](./prose-recipe-invokes-skill-not-paraphrase-2026-05-29.md) — the same single-source-of-truth principle for the case where the "function" is an invokable skill and the prose delegates by invoking it rather than paraphrasing its workflow. Slice-#7+ work should add further adjacent entries when the parallel-extraction or auto-split contracts surface their own dual-consumer questions.
 
 ## Solution
 
@@ -131,6 +131,7 @@ The function itself was extended (not changed) — `walkAndGroup` accepts an opt
 - Issue #6 (Slice 1: tracer end-to-end)
 - Issue #5 (PRD: docs-to-skill)
 - Research: `~/.claude/research/chrislacey89-content-to-skill/url-to-skill-2026-05-01.md` (archive-mode; openable only on the originating user's machine)
+- Sibling pattern: [`prose-recipe-invokes-skill-not-paraphrase-2026-05-29.md`](./prose-recipe-invokes-skill-not-paraphrase-2026-05-29.md) (PR #15)
 
 ## Shelf Life
 
