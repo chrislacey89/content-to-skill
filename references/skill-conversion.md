@@ -34,9 +34,16 @@ Read `EXTRACTION_SUMMARY.md` and plan 8-15 reference files. For each, identify:
 
 1. One reference per major concept or chapter grouping — do not over-split
 2. Target 8-15 references total
-3. Always include:
-   - A `core-framework.md` for the book's main thesis
-   - A `rules-of-thumb.md` for collected heuristics
+3. **Guaranteed files — non-negotiable, every book, every genre.** Two files
+   MUST exist with these exact canonical filenames. Downstream consumers
+   (the `/counsel` skill) read them unconditionally, so an absent or renamed
+   file breaks routing. This is enforced in Step 5 and by
+   `scripts/category_tools.py guaranteed`.
+   - `core-framework.md` — the book's main thesis / core mental model. For
+     **code and technical** books the instinct is to name this `core-concepts.md`;
+     do not. Emit `core-framework.md` as the canonical entry (a `core-concepts.md`
+     alias may exist *in addition*, never instead).
+   - `rules-of-thumb.md` — collected heuristics.
    - Genre-specific required files:
      - **Prescriptive** (business, health, self-help, technical, whitepapers): also include `implementation-playbook.md` covering how to put the book's advice into practice — action sequences, prioritization, adherence strategies, and common execution pitfalls
      - **Literary fiction**: `core-framework.md` should cover the novel's central dialectic and *how it argues* (embodiment, consequence, irresolution, etc.); `rules-of-thumb.md` covers recurring patterns across the work. No `implementation-playbook.md`.
@@ -302,13 +309,21 @@ Create a `book.json` metadata file for library indexing. This file enables the `
 
 After creating all files, verify:
 
-1. **All reference files linked in SKILL.md exist** — check every `references/*.md` link
-2. **SKILL.md is under 500 lines** — count with `wc -l`
-3. **All relative paths are correct** — links use `references/` prefix
-4. **Frontmatter is valid** — name matches directory name, description is present
-5. **Reference files have valid frontmatter** — title, impact, tags, chapter fields
-6. **Reference files are 40-200 lines each**
-7. **book.json is valid** — has required fields (name, title, description), referenceFiles matches actual files
-8. **All quotes have citations** — every `> "..."` block and inline `"..."` quote attributed to the author includes a chapter, page, or structural reference
+1. **Guaranteed files exist by exact name** — `references/core-framework.md` AND
+   `references/rules-of-thumb.md` are both present (not `core-concepts.md`, not a
+   renamed variant). Confirm with:
+   ```bash
+   python3 scripts/category_tools.py guaranteed --slug <skill-name>
+   ```
+   This must exit 0. If it reports a missing file, create it before continuing —
+   this is the invariant `/counsel` Stage 2 depends on.
+2. **All reference files linked in SKILL.md exist** — check every `references/*.md` link
+3. **SKILL.md is under 500 lines** — count with `wc -l`
+4. **All relative paths are correct** — links use `references/` prefix
+5. **Frontmatter is valid** — name matches directory name, description is present
+6. **Reference files have valid frontmatter** — title, impact, tags, chapter fields
+7. **Reference files are 40-200 lines each**
+8. **book.json is valid** — has required fields (name, title, description), referenceFiles matches actual files
+9. **All quotes have citations** — every `> "..."` block and inline `"..."` quote attributed to the author includes a chapter, page, or structural reference
 
 Fix any issues found before reporting completion.

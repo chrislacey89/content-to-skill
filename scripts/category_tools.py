@@ -22,7 +22,7 @@ Commands:
 
 Usage:
   python3 category_tools.py validate [--slug SLUG]
-  python3 category_tools.py guaranteed
+  python3 category_tools.py guaranteed [--slug SLUG]   # SLUG = one book (Step 5 hook)
   python3 category_tools.py audit
   python3 category_tools.py selftest
 """
@@ -123,10 +123,20 @@ def cmd_validate(slug=None):
     return 0
 
 
-def cmd_guaranteed():
-    """The gate: exit non-zero if any book lacks a guaranteed file."""
-    dirs = sorted(glob.glob(os.path.join(LIB, "books", "*")))
-    dirs = [d for d in dirs if os.path.isdir(d)]
+def cmd_guaranteed(slug=None):
+    """The gate: exit non-zero if any book lacks a guaranteed file.
+
+    With --slug, check just that one book (the Step 5 self-verify hook the
+    conversion methodology calls at generation time)."""
+    if slug is not None:
+        d = os.path.join(LIB, "books", slug)
+        if not os.path.isdir(d):
+            print(f"ERROR {slug}: no books/{slug} directory under {LIB}")
+            return 2
+        dirs = [d]
+    else:
+        dirs = sorted(glob.glob(os.path.join(LIB, "books", "*")))
+        dirs = [d for d in dirs if os.path.isdir(d)]
     missing = []
     for d in dirs:
         for f in guaranteed_gaps(d):
@@ -193,7 +203,7 @@ if __name__ == "__main__":
         arg = sys.argv[i + 1]
     dispatch = {
         "validate": lambda: cmd_validate(arg),
-        "guaranteed": cmd_guaranteed,
+        "guaranteed": lambda: cmd_guaranteed(arg),
         "audit": cmd_audit,
         "selftest": cmd_selftest,
     }
