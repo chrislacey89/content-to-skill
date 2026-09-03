@@ -1,0 +1,52 @@
+# robots.txt for https://chrislacey89.github.io/
+#
+# Crawlers only read robots.txt at the ORIGIN ROOT. This site is a GitHub Pages
+# *project* page (https://chrislacey89.github.io/content-to-skill/), so a
+# robots.txt inside this repo's site/public/ would be served at
+# /content-to-skill/robots.txt and ignored by every crawler.
+#
+# This file therefore belongs in a separate user-pages repository:
+#   github.com/chrislacey89/chrislacey89.github.io
+# See README.md in this directory.
+
+# Under RFC 9309 an unlisted agent is allowed by default, so silence here is
+# already permissive. The AI crawlers are named explicitly anyway, so the
+# decision to admit them is deliberate and auditable rather than implicit.
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: *
+Allow: /
+
+Sitemap: https://chrislacey89.github.io/content-to-skill/sitemap-index.xml
