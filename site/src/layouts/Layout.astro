@@ -1,52 +1,97 @@
 ---
+import { Font } from "astro:assets";
 import "../styles/global.css";
+import { site as siteMeta } from "../lib/content";
 
 interface Props {
 	title: string;
 	description: string;
+	/** Absolute or site-relative URL; defaults to the current page. */
+	canonical?: string;
+	ogImage?: string;
+	ogImageAlt?: string;
+	ogType?: "website" | "article";
+	/** Objects serialised into a single server-rendered JSON-LD block. */
+	jsonLd?: unknown[];
+	noindex?: boolean;
 }
 
-const { title, description } = Astro.props;
-const canonicalURL = new URL(Astro.url.pathname, Astro.site);
+const {
+	title,
+	description,
+	canonical,
+	ogImage,
+	ogImageAlt = siteMeta.ogImageAlt,
+	ogType = "website",
+	jsonLd,
+	noindex = false,
+} = Astro.props;
+
+// `trailingSlash: "always"` keeps this identical to the URL GitHub Pages serves,
+// so the canonical never points at a redirect.
+const canonicalURL = canonical
+	? new URL(canonical, Astro.site)
+	: new URL(Astro.url.pathname, Astro.site);
+
+// BASE_URL has no trailing slash (see astro.config.mjs) — normalise before joining.
 const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const ogImageURL = new URL(ogImage ?? `${base}og-image.png`, Astro.site);
 ---
 
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{title}</title>
 		<meta name="description" content={description} />
 		<meta name="author" content="Christopher Lacey" />
+		{noindex && <meta name="robots" content="noindex, nofollow" />}
+		<link rel="canonical" href={canonicalURL} />
 
 		<!-- Favicon -->
 		<link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+		<meta name="theme-color" content="#0a0a0a" />
 
 		<!-- Open Graph -->
+		<meta property="og:site_name" content={siteMeta.productName} />
+		<meta property="og:locale" content="en_US" />
 		<meta property="og:title" content={title} />
 		<meta property="og:description" content={description} />
-		<meta property="og:type" content="website" />
+		<meta property="og:type" content={ogType} />
 		<meta property="og:url" content={canonicalURL} />
-		<meta property="og:image" content={new URL(`${base}og-image.png`, Astro.site)} />
+		<meta property="og:image" content={ogImageURL} />
+		<meta property="og:image:type" content="image/png" />
 		<meta property="og:image:width" content="1200" />
 		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content={ogImageAlt} />
 
 		<!-- Twitter Card -->
 		<meta name="twitter:card" content="summary_large_image" />
 		<meta name="twitter:title" content={title} />
 		<meta name="twitter:description" content={description} />
-		<meta name="twitter:image" content={new URL(`${base}og-image.png`, Astro.site)} />
+		<meta name="twitter:image" content={ogImageURL} />
+		<meta name="twitter:image:alt" content={ogImageAlt} />
 
-		<link rel="canonical" href={canonicalURL} />
+		<!--
+			Self-hosted, subsetted and preloaded by Astro's fonts API. Replaces a
+			render-blocking cross-origin Google Fonts stylesheet, and generates
+			metric-matched fallbacks so swapping the webfont in doesn't shift layout.
+		-->
+		<Font cssVariable="--font-display" preload />
+		<Font cssVariable="--font-body" preload />
+		<Font cssVariable="--font-mono" />
 
-		<!-- Fonts: Lora (display), Old Standard TT (body), JetBrains Mono (code) -->
-		<link rel="preconnect" href="https://fonts.googleapis.com" />
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-		<link
-			href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap"
-			rel="stylesheet"
-		/>
-
-		<title>{title}</title>
+		{
+			/* Server-rendered: client-injected JSON-LD arrives too late for crawlers
+			   that don't execute JavaScript. */
+			jsonLd && jsonLd.length > 0 && (
+				<script
+					type="application/ld+json"
+					is:inline
+					set:html={JSON.stringify(jsonLd)}
+				/>
+			)
+		}
 	</head>
 	<body class="bg-zinc-950 text-zinc-100 min-h-screen">
 		<slot />

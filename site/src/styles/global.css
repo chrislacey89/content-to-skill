@@ -56,3 +56,35 @@ html {
 .fade-in-delay-5 { animation-delay: 0.5s; }
 .fade-in-delay-6 { animation-delay: 0.6s; }
 
+
+/*
+ * Named aliases over the CSS variables emitted by Astro's fonts API
+ * (astro.config.mjs -> experimental.fonts). Components reference these rather
+ * than a literal `font-family: 'Lora', serif`, so the webfont, its subset and
+ * its metric-matched fallback stay defined in exactly one place.
+ */
+.font-display {
+	font-family: var(--font-display), Georgia, serif;
+}
+
+.font-body {
+	font-family: var(--font-body), Georgia, serif;
+}
+
+.font-mono {
+	font-family: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Visually hidden, still announced by screen readers and present in the
+   server-rendered markup for extraction. */
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border-width: 0;
+}

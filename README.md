@@ -42,7 +42,7 @@ Chunks documents, extracts knowledge in parallel, and synthesizes structured ski
 
 [Library View](https://github.com/chrislacey89/library_visualizer) is a companion web app that lets you visually browse your converted books — cover art, search, and quick access to every skill in your collection.
 
-![Library View](site/public/library-view.png)
+![Library View](site/src/assets/library-view.png)
 
 ```bash
 git clone https://github.com/chrislacey89/library_visualizer.git
@@ -83,7 +83,7 @@ Browse and load book knowledge.
 
 ## How It Works
 
-![Workflow Diagram](site/public/workflow-diagram.png)
+![Workflow Diagram](docs/images/workflow-diagram.png)
 
 Two pipelines depending on input type:
 

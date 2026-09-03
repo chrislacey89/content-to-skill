@@ -1,7 +1,11 @@
 ---
+import { Image } from "astro:assets";
 import {
+	faq,
+	headings,
 	hero,
 	problem,
+	repoPipeline,
 	pipelineIntro,
 	pipeline,
 	install,
@@ -19,27 +23,56 @@ import {
 		<div class="max-w-2xl mx-auto text-center">
 			<p
 				class="text-xs uppercase tracking-[0.3em] mb-6"
-				style="font-family: 'Old Standard TT', serif; color: #a89070;"
+				style="font-family: var(--font-body), Georgia, serif; color: #a89070;"
 			>
 				Claude Code Plugin
 			</p>
 			<h1
 				class="text-6xl sm:text-7xl font-normal mb-6 leading-[1.1]"
-				style="font-family: 'Lora', serif; color: #f5f0e8;"
+				style="font-family: var(--font-display), Georgia, serif; color: #f5f0e8;"
 			>
 				{hero.title}
+				<span
+					class="block text-2xl sm:text-3xl mt-4 mb-2 leading-snug"
+					style="color: #c8562e;"
+				>
+					{hero.titleDescriptor}
+				</span>
 			</h1>
 			<p
-				class="text-xl sm:text-2xl mb-8 leading-relaxed"
-				style="font-family: 'Lora', serif; color: #c2532d;"
-			>
-				{hero.tagline}
-			</p>
-			<p
-				class="text-base leading-relaxed max-w-lg mx-auto"
-				style="font-family: 'Old Standard TT', serif; color: #a89070;"
+				class="text-base leading-relaxed max-w-lg mx-auto mb-4"
+				style="font-family: var(--font-body), Georgia, serif; color: #a89070;"
 			>
 				{hero.description}
+			</p>
+			<p
+				class="text-sm leading-relaxed max-w-lg mx-auto mb-10"
+				style="font-family: var(--font-body), Georgia, serif; color: #887762;"
+			>
+				{hero.audience}
+			</p>
+			<div class="flex flex-wrap gap-4 justify-center items-center">
+				<a
+					href={hero.ctas.primary.href}
+					class="inline-block px-6 py-3 rounded text-sm tracking-wider uppercase transition-colors"
+					style="font-family: var(--font-body), Georgia, serif; color: #f5f0e8; background: rgba(194, 83, 45, 0.9); border: 1px solid #c2532d;"
+				>
+					{hero.ctas.primary.label}
+				</a>
+				<a
+					href={hero.ctas.secondary.href}
+					rel="noopener"
+					class="inline-block px-6 py-3 rounded text-sm tracking-wider uppercase transition-colors"
+					style="font-family: var(--font-body), Georgia, serif; color: #a89070; border: 1px solid rgba(162, 144, 112, 0.3);"
+				>
+					{hero.ctas.secondary.label}
+				</a>
+			</div>
+			<p
+				class="text-xs mt-6"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
+			>
+				{install.pricing}
 			</p>
 		</div>
 	</section>
@@ -54,19 +87,19 @@ import {
 		<div class="max-w-2xl mx-auto">
 			<p
 				class="text-xs uppercase tracking-[0.3em] mb-2"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				Chapter I
 			</p>
 			<h2
 				class="text-3xl mb-8"
-				style="font-family: 'Lora', serif; color: #f5f0e8;"
+				style="font-family: var(--font-display), Georgia, serif; color: #f5f0e8;"
 			>
-				The Problem
+				{headings.problem}
 			</h2>
 			<p
 				class="text-lg leading-relaxed mb-8"
-				style="font-family: 'Old Standard TT', serif; color: #a89070;"
+				style="font-family: var(--font-body), Georgia, serif; color: #a89070;"
 			>
 				{problem.text}
 			</p>
@@ -78,19 +111,19 @@ import {
 		<div class="max-w-2xl mx-auto">
 			<p
 				class="text-xs uppercase tracking-[0.3em] mb-2"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				Chapter II
 			</p>
 			<h2
 				class="text-3xl mb-8"
-				style="font-family: 'Lora', serif; color: #f5f0e8;"
+				style="font-family: var(--font-display), Georgia, serif; color: #f5f0e8;"
 			>
-				The Solution
+				{headings.solution}
 			</h2>
 			<p
 				class="text-lg leading-relaxed"
-				style="font-family: 'Old Standard TT', serif; color: #a89070;"
+				style="font-family: var(--font-body), Georgia, serif; color: #a89070;"
 			>
 				{problem.solution}
 			</p>
@@ -107,54 +140,54 @@ import {
 		<div class="max-w-2xl mx-auto">
 			<p
 				class="text-xs uppercase tracking-[0.3em] mb-2"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				Chapter III
 			</p>
 			<h2
 				class="text-3xl mb-8"
-				style="font-family: 'Lora', serif; color: #f5f0e8;"
+				style="font-family: var(--font-display), Georgia, serif; color: #f5f0e8;"
 			>
-				The Proof
+				{headings.proof}
 			</h2>
 			<h3
 				class="text-xl mb-6"
-				style="font-family: 'Lora', serif; color: #d4c4a8;"
+				style="font-family: var(--font-display), Georgia, serif; color: #d4c4a8;"
 			>
 				{benchmark.book}
 			</h3>
 			<div
 				class="grid grid-cols-2 sm:grid-cols-4 gap-6 mb-8"
-				style="font-family: 'Old Standard TT', serif;"
+				style="font-family: var(--font-body), Georgia, serif;"
 			>
 				<div>
-					<p class="text-xs uppercase tracking-wider mb-1" style="color: #6b5c4a;">
+					<p class="text-xs uppercase tracking-wider mb-1" style="color: #8a775f;">
 						Pages
 					</p>
 					<p style="color: #d4c4a8;">{benchmark.pages}</p>
 				</div>
 				<div>
-					<p class="text-xs uppercase tracking-wider mb-1" style="color: #6b5c4a;">
+					<p class="text-xs uppercase tracking-wider mb-1" style="color: #8a775f;">
 						Time
 					</p>
 					<p style="color: #d4c4a8;">{benchmark.time}</p>
 				</div>
 				<div>
-					<p class="text-xs uppercase tracking-wider mb-1" style="color: #6b5c4a;">
-						Cost
+					<p class="text-xs uppercase tracking-wider mb-1" style="color: #8a775f;">
+						{benchmark.costLabel}
 					</p>
 					<p style="color: #d4c4a8;">{benchmark.cost}</p>
 				</div>
 				<div>
-					<p class="text-xs uppercase tracking-wider mb-1" style="color: #6b5c4a;">
-						Output
+					<p class="text-xs uppercase tracking-wider mb-1" style="color: #8a775f;">
+						{benchmark.outputLabel}
 					</p>
 					<p style="color: #d4c4a8;">{benchmark.output}</p>
 				</div>
 			</div>
 			<p
 				class="text-sm leading-relaxed"
-				style="font-family: 'Old Standard TT', serif; color: #7a6b58;"
+				style="font-family: var(--font-body), Georgia, serif; color: #887762;"
 			>
 				{benchmark.costNote}
 			</p>
@@ -171,19 +204,19 @@ import {
 		<div class="max-w-2xl mx-auto">
 			<p
 				class="text-xs uppercase tracking-[0.3em] mb-2"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				Chapter IV
 			</p>
 			<h2
 				class="text-3xl mb-4"
-				style="font-family: 'Lora', serif; color: #f5f0e8;"
+				style="font-family: var(--font-display), Georgia, serif; color: #f5f0e8;"
 			>
-				The Output
+				{headings.outputSample}
 			</h2>
 			<p
 				class="text-base leading-relaxed mb-10"
-				style="font-family: 'Old Standard TT', serif; color: #a89070;"
+				style="font-family: var(--font-body), Georgia, serif; color: #a89070;"
 			>
 				Here's what the plugin produced from <em style="color: #d4c4a8;">{output.book}</em>, a real 400-page book, processed in 42 minutes.
 			</p>
@@ -191,7 +224,7 @@ import {
 			<!-- Overview excerpt -->
 			<p
 				class="text-xs uppercase tracking-wider mb-3"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				30-Second Overview
 			</p>
@@ -201,14 +234,14 @@ import {
 			>
 				<pre
 					class="text-sm leading-relaxed whitespace-pre-wrap"
-					style="font-family: 'JetBrains Mono', monospace; color: #a89070;"
+					style="font-family: var(--font-mono), ui-monospace, monospace; color: #a89070;"
 				>{output.overview}</pre>
 			</div>
 
 			<!-- Situational index excerpt -->
 			<p
 				class="text-xs uppercase tracking-wider mb-3"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				Situational Index
 			</p>
@@ -218,7 +251,7 @@ import {
 			>
 				<pre
 					class="text-sm leading-relaxed whitespace-pre-wrap"
-					style="font-family: 'JetBrains Mono', monospace; color: #a89070;"
+					style="font-family: var(--font-mono), ui-monospace, monospace; color: #a89070;"
 				>{output.index}</pre>
 			</div>
 		</div>
@@ -230,23 +263,23 @@ import {
 	</div>
 
 	<!-- Chapter V: How It Works (Pipeline) -->
-	<section class="px-6 py-20">
+	<section class="px-6 py-20" id="pipeline">
 		<div class="max-w-2xl mx-auto">
 			<p
 				class="text-xs uppercase tracking-[0.3em] mb-2"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				Chapter V
 			</p>
 			<h2
 				class="text-3xl mb-4"
-				style="font-family: 'Lora', serif; color: #f5f0e8;"
+				style="font-family: var(--font-display), Georgia, serif; color: #f5f0e8;"
 			>
-				How It Works
+				{headings.pipeline}
 			</h2>
 			<p
 				class="text-base leading-relaxed mb-12"
-				style="font-family: 'Old Standard TT', serif; color: #a89070;"
+				style="font-family: var(--font-body), Georgia, serif; color: #a89070;"
 			>
 				{pipelineIntro}
 			</p>
@@ -268,7 +301,7 @@ import {
 							{/* Node circle */}
 							<div
 								class="absolute left-[-34px] top-[3px] w-[23px] h-[23px] rounded-full border-2 flex items-center justify-center"
-								style="border-color: #c2532d; background: transparent;"
+								style="border-color: #c8562e; background: transparent;"
 							>
 								<div
 									class="w-[9px] h-[9px] rounded-full"
@@ -281,20 +314,20 @@ import {
 								<div class="flex items-baseline gap-3 mb-1">
 									<span
 										class="text-sm"
-										style="font-family: 'Lora', serif; color: #6b5c4a;"
+										style="font-family: var(--font-display), Georgia, serif; color: #8a775f;"
 									>
 										{step.step}
 									</span>
 									<h3
 										class="text-lg"
-										style="font-family: 'Lora', serif; color: #d4c4a8;"
+										style="font-family: var(--font-display), Georgia, serif; color: #d4c4a8;"
 									>
 										{step.name}
 									</h3>
 								</div>
 								<p
 									class="text-sm leading-relaxed"
-									style="font-family: 'Old Standard TT', serif; color: #7a6b58;"
+									style="font-family: var(--font-body), Georgia, serif; color: #887762;"
 								>
 									{step.description}
 								</p>
@@ -452,41 +485,47 @@ import {
 	</div>
 
 	<!-- Chapter VI: Get Started -->
-	<section class="px-6 py-20">
+	<section class="px-6 py-20" id="install">
 		<div class="max-w-2xl mx-auto">
 			<p
 				class="text-xs uppercase tracking-[0.3em] mb-2"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				Chapter VI
 			</p>
 			<h2
 				class="text-3xl mb-8"
-				style="font-family: 'Lora', serif; color: #f5f0e8;"
+				style="font-family: var(--font-display), Georgia, serif; color: #f5f0e8;"
 			>
-				Get Started
+				{headings.install}
 			</h2>
 
 			<p
-				class="text-base leading-relaxed mb-10"
-				style="font-family: 'Old Standard TT', serif; color: #a89070;"
+				class="text-base leading-relaxed mb-4"
+				style="font-family: var(--font-body), Georgia, serif; color: #a89070;"
 			>
 				{install.intro}
 			</p>
+			<p
+				class="text-sm mb-10"
+				style="font-family: var(--font-body), Georgia, serif; color: #c8562e;"
+			>
+				{install.pricing}
+			</p>
 
 			<!-- Prerequisites -->
-			<p
-				class="text-sm uppercase tracking-wider mb-3"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+			<h3
+				class="text-sm uppercase tracking-wider mb-3 font-normal"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				Prerequisites
-			</p>
+			</h3>
 			<div class="flex gap-4 mb-10">
 				{
 					install.prerequisites.map((p) => (
 						<span
 							class="text-sm px-3 py-1 rounded"
-							style="font-family: 'JetBrains Mono', monospace; color: #d4c4a8; background: rgba(162, 144, 112, 0.1); border: 1px solid rgba(162, 144, 112, 0.15);"
+							style="font-family: var(--font-mono), ui-monospace, monospace; color: #d4c4a8; background: rgba(162, 144, 112, 0.1); border: 1px solid rgba(162, 144, 112, 0.15);"
 						>
 							{p}
 						</span>
@@ -495,19 +534,19 @@ import {
 			</div>
 
 			<!-- Install commands -->
-			<p
-				class="text-sm uppercase tracking-wider mb-3"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+			<h3
+				class="text-sm uppercase tracking-wider mb-3 font-normal"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				Install
-			</p>
+			</h3>
 			<div class="space-y-3 mb-10">
 				{
 					install.commands.map((cmd) => (
 						<div>
 							<p
 								class="text-xs mb-1"
-								style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+								style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 							>
 								{cmd.label}
 							</p>
@@ -517,17 +556,20 @@ import {
 							>
 								<code
 									class="text-sm"
-									style="font-family: 'JetBrains Mono', monospace; color: #c2532d;"
+									style="font-family: var(--font-mono), ui-monospace, monospace; color: #c8562e;"
 								>
 									{cmd.command}
 								</code>
 								<button
-									class="copy-btn absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+									type="button"
+									aria-label={`Copy command: ${cmd.command}`}
+									class="copy-btn absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer"
 									data-copy={cmd.command}
-									style="color: #6b5c4a;"
+									style="color: #8a775f;"
 								>
 									<svg
 										class="w-4 h-4"
+										aria-hidden="true"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -547,26 +589,26 @@ import {
 			</div>
 
 			<!-- Quick Start -->
-			<p
-				class="text-sm uppercase tracking-wider mb-3"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+			<h3
+				class="text-sm uppercase tracking-wider mb-3 font-normal"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				Quick Start
-			</p>
+			</h3>
 			<div class="space-y-3">
 				{
 					install.quickStart.map((cmd, i) => (
 						<div class="flex items-start gap-4">
 							<span
 								class="text-sm mt-3 shrink-0"
-								style="font-family: 'Lora', serif; color: #6b5c4a;"
+								style="font-family: var(--font-display), Georgia, serif; color: #8a775f;"
 							>
 								{i + 1}.
 							</span>
 							<div class="flex-1">
 								<p
 									class="text-xs mb-1"
-									style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+									style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 								>
 									{cmd.label}
 								</p>
@@ -576,17 +618,20 @@ import {
 								>
 									<code
 										class="text-sm"
-										style="font-family: 'JetBrains Mono', monospace; color: #c2532d;"
+										style="font-family: var(--font-mono), ui-monospace, monospace; color: #c8562e;"
 									>
 										{cmd.command}
 									</code>
 									<button
-										class="copy-btn absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+										type="button"
+										aria-label={`Copy command: ${cmd.command}`}
+										class="copy-btn absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity cursor-pointer"
 										data-copy={cmd.command}
-										style="color: #6b5c4a;"
+										style="color: #8a775f;"
 									>
 										<svg
 											class="w-4 h-4"
+											aria-hidden="true"
 											fill="none"
 											stroke="currentColor"
 											viewBox="0 0 24 24"
@@ -618,27 +663,31 @@ import {
 		<div class="max-w-2xl mx-auto">
 			<p
 				class="text-xs uppercase tracking-[0.3em] mb-2"
-				style="font-family: 'Old Standard TT', serif; color: #6b5c4a;"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
 			>
 				Chapter VII
 			</p>
 			<h2
 				class="text-3xl mb-4"
-				style="font-family: 'Lora', serif; color: #f5f0e8;"
+				style="font-family: var(--font-display), Georgia, serif; color: #f5f0e8;"
 			>
-				{companion.title}
+				{headings.companion}
 			</h2>
 			<p
 				class="text-base leading-relaxed mb-10"
-				style="font-family: 'Old Standard TT', serif; color: #a89070;"
+				style="font-family: var(--font-body), Georgia, serif; color: #a89070;"
 			>
 				{companion.description}
 			</p>
 
 			<a href={companion.repo} target="_blank" rel="noopener">
-				<img
+				<Image
 					src={companion.image}
-					alt="Library View — visual book grid"
+					alt={companion.imageAlt}
+					widths={[640, 960, 1280]}
+					sizes="(max-width: 672px) 100vw, 672px"
+					loading="lazy"
+					decoding="async"
 					class="w-full rounded mb-10"
 					style="border: 1px solid rgba(162, 144, 112, 0.15);"
 				/>
@@ -650,7 +699,7 @@ import {
 					target="_blank"
 					rel="noopener"
 					class="inline-block px-6 py-3 rounded text-sm tracking-wider uppercase transition-colors"
-					style="font-family: 'Old Standard TT', serif; color: #f5f0e8; background: rgba(194, 83, 45, 0.8); border: 1px solid #c2532d;"
+					style="font-family: var(--font-body), Georgia, serif; color: #f5f0e8; background: rgba(194, 83, 45, 0.8); border: 1px solid #c2532d;"
 				>
 					View Library App
 				</a>
@@ -658,10 +707,104 @@ import {
 		</div>
 	</section>
 
+	<!-- Divider -->
+	<div class="max-w-2xl mx-auto px-6">
+		<hr style="border-color: rgba(162, 144, 112, 0.2);" />
+	</div>
+
+	<!-- Chapter VIII: Code exercise repositories -->
+	<section class="px-6 py-20" id="code-exercises">
+		<div class="max-w-2xl mx-auto">
+			<p
+				class="text-xs uppercase tracking-[0.3em] mb-2"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
+			>
+				Chapter VIII
+			</p>
+			<h2
+				class="text-3xl mb-4"
+				style="font-family: var(--font-display), Georgia, serif; color: #f5f0e8;"
+			>
+				Turn a code exercise repository into a skill
+			</h2>
+			<p
+				class="text-base leading-relaxed mb-10"
+				style="font-family: var(--font-body), Georgia, serif; color: #a89070;"
+			>
+				{repoPipeline.intro}
+			</p>
+			<dl class="space-y-6">
+				{
+					repoPipeline.steps.map((step) => (
+						<div>
+							<dt
+								class="text-lg mb-1"
+								style="font-family: var(--font-display), Georgia, serif; color: #d4c4a8;"
+							>
+								{step.name}
+							</dt>
+							<dd
+								class="text-sm leading-relaxed"
+								style="font-family: var(--font-body), Georgia, serif; color: #887762;"
+							>
+								{step.description}
+							</dd>
+						</div>
+					))
+				}
+			</dl>
+		</div>
+	</section>
+
+	<!-- Divider -->
+	<div class="max-w-2xl mx-auto px-6">
+		<hr style="border-color: rgba(162, 144, 112, 0.2);" />
+	</div>
+
+	<!-- Chapter IX: FAQ. Rendered from the same `faq` array that builds the
+	     FAQPage JSON-LD, so the visible answers and the structured data cannot
+	     drift apart. -->
+	<section class="px-6 py-20" id="faq">
+		<div class="max-w-2xl mx-auto">
+			<p
+				class="text-xs uppercase tracking-[0.3em] mb-2"
+				style="font-family: var(--font-body), Georgia, serif; color: #8a775f;"
+			>
+				Chapter IX
+			</p>
+			<h2
+				class="text-3xl mb-10"
+				style="font-family: var(--font-display), Georgia, serif; color: #f5f0e8;"
+			>
+				{headings.faq}
+			</h2>
+			<div class="space-y-8">
+				{
+					faq.map((entry) => (
+						<div>
+							<h3
+								class="text-lg mb-2"
+								style="font-family: var(--font-display), Georgia, serif; color: #d4c4a8;"
+							>
+								{entry.question}
+							</h3>
+							<p
+								class="text-base leading-relaxed"
+								style="font-family: var(--font-body), Georgia, serif; color: #a89070;"
+							>
+								{entry.answer}
+							</p>
+						</div>
+					))
+				}
+			</div>
+		</div>
+	</section>
+
 	<!-- Footer -->
 	<footer class="px-6 py-12">
 		<div class="max-w-2xl mx-auto text-center">
-			<p class="text-xs" style="font-family: 'Old Standard TT', serif; color: #6b5c4a;">
+			<p class="text-xs" style="font-family: var(--font-body), Georgia, serif; color: #8a775f;">
 				{plugin.name} v{plugin.version} &middot; {plugin.license} &middot;
 				Built by <a
 					href={author.github}
@@ -677,7 +820,7 @@ import {
 					class="underline hover:no-underline"
 					style="color: #a89070;"
 				>
-					GitHub
+					Content-to-Skill on GitHub
 				</a>
 			</p>
 		</div>
@@ -737,22 +880,22 @@ import {
 		z-index: 10;
 	}
 	.wf-label {
-		font-family: 'Lora', serif;
+		font-family: var(--font-display), Georgia, serif;
 		font-size: 0.9rem;
 		font-weight: 600;
 		color: #d4c4a8;
 		line-height: 1.3;
 	}
 	.wf-detail {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-mono), ui-monospace, monospace;
 		font-size: 0.6rem;
 		font-weight: 300;
-		color: #6b5c4a;
+		color: #8a775f;
 		margin-top: 6px;
 		line-height: 1.6;
 	}
 	.wf-badge {
-		font-family: 'Old Standard TT', serif;
+		font-family: var(--font-body), Georgia, serif;
 		display: inline-block;
 		font-size: 0.55rem;
 		letter-spacing: 0.15em;
@@ -772,7 +915,7 @@ import {
 		padding: 16px 32px;
 	}
 	.wf-input .wf-label { color: #c2532d }
-	.wf-input .wf-badge { color: #c2532d; border-color: rgba(194, 83, 45, 0.3) }
+	.wf-input .wf-badge { color: #c8562e; border-color: rgba(194, 83, 45, 0.3) }
 	.wf-input:hover { box-shadow: 0 0 24px rgba(194, 83, 45, 0.1) }
 
 	.wf-decision {
@@ -789,7 +932,7 @@ import {
 	}
 	.wf-decision .wf-label {
 		transform: rotate(-45deg);
-		color: #c2532d;
+		color: #c8562e;
 		font-size: 0.7rem;
 		white-space: nowrap;
 	}
@@ -802,7 +945,7 @@ import {
 		background: rgba(194, 83, 45, 0.1);
 	}
 	.wf-ai .wf-label { color: #c2532d }
-	.wf-ai .wf-badge { color: #c2532d; border-color: rgba(194, 83, 45, 0.3) }
+	.wf-ai .wf-badge { color: #c8562e; border-color: rgba(194, 83, 45, 0.3) }
 	.wf-ai:hover { box-shadow: 0 0 24px rgba(194, 83, 45, 0.1) }
 
 	.wf-dots {
@@ -825,7 +968,7 @@ import {
 		max-width: 400px;
 	}
 	.wf-hero .wf-label { color: #f5f0e8; font-size: 1rem }
-	.wf-hero .wf-badge { color: #c2532d; border-color: rgba(194, 83, 45, 0.3) }
+	.wf-hero .wf-badge { color: #c8562e; border-color: rgba(194, 83, 45, 0.3) }
 	.wf-hero:hover { box-shadow: 0 0 32px rgba(194, 83, 45, 0.1) }
 
 	.wf-terminal {
@@ -849,7 +992,7 @@ import {
 		align-items: center;
 	}
 	.wf-pipeline-title {
-		font-family: 'Lora', serif;
+		font-family: var(--font-display), Georgia, serif;
 		font-size: 1.15rem;
 		font-weight: 600;
 		color: #f5f0e8;
@@ -881,14 +1024,14 @@ import {
 		margin-bottom: 4px;
 	}
 	.wf-fork-label {
-		font-family: 'Old Standard TT', serif;
+		font-family: var(--font-body), Georgia, serif;
 		font-size: 0.6rem;
-		color: #6b5c4a;
+		color: #8a775f;
 		letter-spacing: 0.15em;
 		text-transform: uppercase;
 	}
 	.wf-section-label {
-		font-family: 'Old Standard TT', serif;
+		font-family: var(--font-body), Georgia, serif;
 		font-size: 0.7rem;
 		color: #a89070;
 		letter-spacing: 0.2em;
