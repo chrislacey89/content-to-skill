@@ -18,12 +18,18 @@ Commands:
                 that turns "when present" into "always present" once a corpus is
                 clean. Run it green before relying on unconditional reads.
   audit         List each category and its book count (advisory overview).
+  manifest      Print one TSV row per book: slug, category, tags (and the
+                description with --full). This is /counsel's Stage 0 routing
+                table: small enough to scan the WHOLE corpus every run, so
+                `category` ranks candidates instead of excluding them. Built
+                from each book.json, so it never lags a stale index.json.
   selftest      Feed known-bad records and assert each defect is caught.
 
 Usage:
   python3 category_tools.py validate [--slug SLUG]
   python3 category_tools.py guaranteed [--slug SLUG]   # SLUG = one book (Step 5 hook)
   python3 category_tools.py audit
+  python3 category_tools.py manifest [--full] [--slug SLUG[,SLUG...]]
   python3 category_tools.py selftest
 """
 import sys, json, glob, os
@@ -33,6 +39,13 @@ LIB = os.environ.get("CLAUDE_LIBRARY_DIR") or os.path.expanduser("~/.claude/libr
 INDEX = os.path.join(LIB, "index.json")
 BOOKS_GLOB = os.path.join(LIB, "books", "*", "book.json")
 GUARANTEED = ("references/core-framework.md", "references/rules-of-thumb.md")
+# The shared shelves. Freeform categories stay legal (WARN, not ERROR), but a
+# near-synonym of a shelf ("technical", "technology") splits it, so it is surfaced.
+SHELVES = {
+    "business", "psychology", "software-engineering", "philosophy", "science",
+    "leadership", "health", "finance", "ai", "writing", "design", "game-design",
+    "religion", "literature", "reference",
+}
 
 
 def _norm(s):
@@ -55,8 +68,8 @@ def check_record(rec, valid):
     """Hard errors for one book/index record. Pure, so selftest can drive it.
 
     `valid` is the set of category strings actually present in the corpus; it is
-    used only for casing/near-duplicate detection (there is no external registry
-    of legal categories in this single-`category` model)."""
+    used for casing/near-duplicate detection. SHELVES is the advisory registry:
+    an off-list category warns but stays legal."""
     errors, warnings = [], []
     name = rec.get("name", "<unknown>")
     cat = rec.get("category")
@@ -67,6 +80,8 @@ def check_record(rec, valid):
     near = [v for v in valid if v != cat and _norm(v) == _norm(cat)]
     if near:
         warnings.append(f"{name}: category '{cat}' collides by casing/kebab with '{near[0]}'")
+    elif cat not in SHELVES:
+        warnings.append(f"{name}: category '{cat}' is not a shared shelf (see SHELVES; re-file or add it)")
     return errors, warnings
 
 
@@ -166,6 +181,34 @@ def cmd_audit():
     return 0
 
 
+def manifest_row(rec, full=False):
+    """One TSV routing row for a book record. Pure, so selftest can drive it."""
+    clean = lambda s: " ".join(str(s or "").split())  # tabs/newlines would break the TSV
+    cols = [clean(rec.get("name")), clean(rec.get("category")),
+            ",".join(clean(t) for t in rec.get("tags") or [])]
+    if full:
+        cols.append(clean(rec.get("description")))
+    return "\t".join(cols)
+
+
+def cmd_manifest(slugs=None, full=False):
+    """The routing table /counsel scans whole, instead of gating by category."""
+    books = load_books()
+    if not books:
+        print(f"ERROR: no book.json files under {os.path.join(LIB, 'books')}")
+        return 2
+    if slugs:
+        unknown = [s for s in slugs if s not in books]
+        for s in unknown:
+            print(f"ERROR {s}: no book.json with name == '{s}' under books/")
+        if unknown:
+            return 2
+        books = {s: books[s] for s in slugs}
+    for name in sorted(books):
+        print(manifest_row(books[name], full))
+    return 0
+
+
 def cmd_selftest():
     valid = {"Writing", "Change & Adoption"}
     cases = [
@@ -188,6 +231,21 @@ def cmd_selftest():
     else:
         ok = False
         print("  [FAIL] near-duplicate casing warning did not fire")
+    # an off-list category (a shelf synonym) must be surfaced
+    _, w = check_record({"name": "x", "category": "technical"}, valid)
+    if any("not a shared shelf" in m for m in w):
+        print("  [ok] off-shelf category warning fires")
+    else:
+        ok = False
+        print("  [FAIL] off-shelf category warning did not fire")
+    # manifest rows must stay one line / fixed columns even with dirty metadata
+    row = manifest_row({"name": "x", "category": "Writing", "tags": ["a", "b"],
+                        "description": "Use\twhen\nmessy"}, full=True)
+    if row == "x\tWriting\ta,b\tUse when messy":
+        print("  [ok] manifest row is clean 4-column TSV")
+    else:
+        ok = False
+        print(f"  [FAIL] manifest row malformed: {row!r}")
     print("\nselftest: PASS" if ok else "\nselftest: FAIL")
     return 0 if ok else 1
 
@@ -205,6 +263,7 @@ if __name__ == "__main__":
         "validate": lambda: cmd_validate(arg),
         "guaranteed": lambda: cmd_guaranteed(arg),
         "audit": cmd_audit,
+        "manifest": lambda: cmd_manifest(arg.split(",") if arg else None, "--full" in sys.argv),
         "selftest": cmd_selftest,
     }
     if cmd not in dispatch:
