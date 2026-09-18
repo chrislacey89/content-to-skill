@@ -291,7 +291,7 @@ Create a `book.json` metadata file for library indexing. This file enables the `
 | `title` | Yes | Full book title |
 | `author` | No | Author name(s) |
 | `year` | No | Publication year (integer or null) |
-| `category` | No | Single category: `business`, `technical`, `self-help`, `health`, `science`, etc. |
+| `category` | No | Single category. Use an existing shelf (`business`, `psychology`, `software-engineering`, `writing`, `design`, `science`, `health`, ...; run `category_tools.py audit` to list them) rather than a near-synonym such as `technical` or `technology` |
 | `tags` | No | 3-7 kebab-case tags for search/filtering |
 | `description` | Yes | One-sentence description (reuse from SKILL.md frontmatter) |
 | `referenceFiles` | No | Array of relative paths to all reference files |

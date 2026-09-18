@@ -28,7 +28,7 @@ Parse `$ARGUMENTS` for these flags. Any unrecognized positional argument is the 
 | `--pages <n>` | `5` | Pages/sections per chunk (book pipeline only) |
 | `--citation <style>` | (prompt user) | `chapter` or `page` — skip citation style prompt (book pipeline only) |
 | `--genre <type>` | (prompt user) | `prescriptive`, `literary-fiction`, `philosophy`, `poetry-drama`, or `religious` — skip genre prompt (book pipeline only) |
-| `--category <category>` | (prompt user) | Category for library (e.g., `business`, `technical`) — skip category confirmation |
+| `--category <category>` | (prompt user) | Category for library (e.g., `business`, `software-engineering`) — skip category confirmation |
 | `--pattern <name>` | (auto-detect) | Exercise detector pattern: `numbered-dotted`, `generic`, `flat-file` (repo pipeline only) |
 | `--site-base <url>` | (required for docs) | Base URL of the rendered docs site (e.g., `https://effect.website`). Used to construct citations. Docs pipeline only. |
 | `--docs-root <path>` | `docs/` | Repo-relative path to the **Starlight content root** (e.g., `content/src/content/docs/docs`). This anchors all citation URLs — the URL prefix the rendered site mounts at is `<site-base>/<lastSegment(docs-root)>/...`. To walk only a subtree of the content root, pass that subtree as the input's `:path` component (e.g., `github:owner/repo:content/src/content/docs/docs/error-management`); the URL math still uses `--docs-root`. Docs pipeline only. |
@@ -164,10 +164,10 @@ Use the `genreType` (from Q2 or `--genre` flag) to determine the options:
   - Other (type your own)
 
 - **`prescriptive`** (no single recommendation — depends on the book's subject):
-  - "business", "health", "psychology", "technology", "software-engineering", "science", "finance", "leadership"
+  - "business", "psychology", "software-engineering", "writing", "design", "science", "health", "finance", "leadership", "ai"
   - Other (type your own)
 
-Known categories with themed cover colors: `business`, `health`, `ai`, `technology`, `software-engineering`, `psychology`, `science`, `finance`, `leadership`, `literature`, `philosophy`, `religion`. Any freeform value is also valid.
+Shared shelves: `business`, `psychology`, `software-engineering`, `philosophy`, `science`, `leadership`, `health`, `finance`, `ai`, `writing`, `design`, `game-design`, `religion`, `literature`, `reference`. **Prefer an existing shelf.** A freeform value is still valid, but near-synonyms of a shelf (`technical`, `technology`, `software engineering`, `self-help`) split it and are what `category_tools.py validate` flags — a book about code is `software-engineering`, a book about UX or visual design is `design`.
 
 Store the choices as `citationStyle` (`"chapter"` or `"page"`), `genreType` (`"prescriptive"`, `"literary-fiction"`, `"philosophy"`, `"poetry-drama"`, or `"religious"`), and `confirmedCategory` (the selected or typed category string), then update `progress.json`:
 ```json
@@ -852,7 +852,7 @@ Wait for the synthesis subagent to complete. Report progress and update `progres
 2. Read `/tmp/content-to-skill/<name>/exercises_manifest.json` for source metadata
 
 3. **If `confirmedCategory` already exists in `progress.json`** (from the `--category` flag), use it and skip the prompt. Otherwise, present the user with a choice using `AskUserQuestion`:
-   - "technical (Recommended)" — coding courses, programming exercises
+   - "software-engineering (Recommended)" — coding courses, programming exercises
    - "ai" — AI/ML focused courses
    - "science" — scientific computing courses
    - The user can always type a custom category via "Other"

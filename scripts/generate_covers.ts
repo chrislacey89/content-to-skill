@@ -21,6 +21,9 @@ const CATEGORY_COLORS: Record<string, string> = {
 	finance: "#0E9F6E",
 	leadership: "#E02424",
 	"software-engineering": "#3B82F6",
+	writing: "#9F1239",
+	design: "#DB2777",
+	reference: "#4B5563",
 };
 const DEFAULT_COLOR = "#374151";
 
