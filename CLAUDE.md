@@ -63,3 +63,5 @@ npx tsx scripts/library_migrate.ts
 # Install plugin locally for testing
 # /plugin install /Users/christopherlacey/Documents/content-to-skill
 ```
+
+Subagent prompts in `commands/content-to-skill.md` have no automated test: `npm test` never reads them. When a change edits a prompt that has a fixture under `tests/fixtures/prompts/`, run that prompt on its fixture as the fixture's README says, and record the result in the PR's Review Notes. When a change edits a prompt that has no fixture, add one in the same PR.

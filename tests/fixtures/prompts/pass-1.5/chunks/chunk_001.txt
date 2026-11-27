@@ -1,0 +1,10 @@
+Chapter 1: Signals
+
+The idea of slack in systems (Marlow 2004) shapes everything that follows.
+We will return to the cost of coordination in Chapter 3.
+Queue behavior is covered in Chapter 2.
+
+Bibliography
+
+Marlow, J. Idle Capacity: Why Organizations Need Room. Northfield Press, 2004.
+Ostrand, P. Notes on Feedback. Hale, 1999.
