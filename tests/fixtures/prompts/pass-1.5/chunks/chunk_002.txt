@@ -1,0 +1,8 @@
+Chapter 2: Queues
+
+A queue grows without bound when arrival exceeds service. See the glossary
+entry for "utilization ceiling".
+
+Chapter 3: Teams
+
+Teams form around shared goals. This chapter covers team size and roles.

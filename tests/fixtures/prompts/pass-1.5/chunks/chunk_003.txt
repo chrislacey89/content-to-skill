@@ -1,0 +1,3 @@
+Glossary
+
+Utilization ceiling: the load above which waiting time rises sharply.
