@@ -307,6 +307,7 @@ You are checking the uncertainty and absence flags in a book's extractions again
    - every statement that something the text should contain is missing, not found, not defined, or not given an entry
    - every forward reference to coverage the author promises later ("covered in Chapter N", "we will return to this")
    Skip [UNCLEAR: exact chapter/page] locator flags; they are about citation position, not content.
+   Skip any flag already marked `(verified-absent)` or `(unverified)`: an earlier run checked it. Do not search for it or rewrite it, but still copy its earlier result into the table in step 6 (keys searched from the flag, result as marked).
 3. For each claim, pick at least two search keys by the two-key search rule in the Quality Standards of ${CLAUDE_PLUGIN_ROOT}/references/research-prompt.md (Read it first). Add any keys the flag already names.
 4. Search ALL chunk files for each key: /tmp/content-to-skill/<name>/chunks/chunk_*.txt (use Grep with line numbers). Read the lines around each hit to confirm it is the item itself, not just a passing mention.
 5. Rewrite each flag in place in its extraction file:
