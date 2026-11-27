@@ -358,7 +358,7 @@ If the Pass 1 extractions used adapted citations (e.g., Book/Part/Canto referenc
    ### Key Concepts (top 15)
    - [Term]: [brief definition] (per citation style used in extractions)
    ### Unresolved Threads (max 5)
-   - [Topic the author promised to address later, or a gap in the text] (verified | unverified)
+   - [Topic the author promised to address later] (verified | unverified)
      Label each thread `verified` when flag-verification.md shows it was searched for across all chunks and stayed absent, and `unverified` otherwise. Never list a claim flag-verification.md marks `resolved`: the item is in the text.
    ### Recurring Themes (3-5)
    - [Theme]: [how it's developing across chapters]
