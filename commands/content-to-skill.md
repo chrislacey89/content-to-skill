@@ -311,7 +311,8 @@ You are checking the uncertainty and absence flags in a book's extractions again
 3. For each claim, pick at least two search keys by the two-key search rule in the Quality Standards of ${CLAUDE_PLUGIN_ROOT}/references/research-prompt.md (Read it first). Add any keys the flag already names.
 4. Search ALL chunk files for each key: /tmp/content-to-skill/<name>/chunks/chunk_*.txt (use Grep with line numbers). Read the lines around each hit to confirm it is the item itself, not just a passing mention.
 5. Rewrite each flag in place in its extraction file:
-   - Found → replace the flag with the content it was missing, cited per the extraction's style, followed by [RESOLVED: found at chunk_NNN.txt:LINE]
+   - Found, and the claim is a forward reference to a later chunk → leave the extraction as it is (the content belongs to that later chunk's own extraction); record it only in the step 6 table as resolved
+   - Found, any other claim → replace the flag with the content it was missing, cited per the extraction's style, followed by [RESOLVED: found at chunk_NNN.txt:LINE]
    - Not found → [UNCLEAR (verified-absent): <original reason>; searched "<key1>", "<key2>", ... across all chunks]
    - No usable key (the flag is about meaning, not a missing item) → [UNCLEAR (unverified): <original reason>]
    A promise that a later chunk does not deliver is a true gap: keep it as verified-absent.
