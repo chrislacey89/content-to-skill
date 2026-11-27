@@ -257,6 +257,7 @@ You are extracting knowledge from a book chunk. Follow the methodology exactly.
 ## Hard Constraints
 - Never fabricate content not present in the source chunk
 - Flag uncertain content with [UNCLEAR: reason]
+- Before writing any claim that something is missing or not found (a reference entry, a definition, a promised section), search the chunk by at least two keys (for example the author's surname and title words, not only the term as cited) and name the keys in the flag: [UNCLEAR: no bibliography entry; searched "<term>", "<surname>"]
 - If the chunk is unreadable, write an Extraction Error block and return "Chunk NNN: EXTRACTION ERROR"
 - Preserve exact quotes for definitional statements
 
