@@ -806,6 +806,7 @@ You are extracting the teaching content from a code exercise. Follow the methodo
 ## Hard Constraints
 - Never fabricate content not present in the source files
 - Flag uncertain content with [UNCLEAR: reason]
+- Before writing any claim that something is missing or not found, read the two-key search rule in `${CLAUDE_PLUGIN_ROOT}/references/research-prompt.md` (Quality Standards, the bullet beginning "Before claiming that something the text should contain is absent"), apply it to the files you were given in place of the chunk, and name the keys you searched in the flag
 - Preserve exact code for before/after examples — do not paraphrase code
 - Focus on the delta between problem and solution — this is where the learning lives
 
@@ -1130,6 +1131,7 @@ Example: `manifest.docsRoot = "content/src/content/docs/docs"`, `file.relPath = 
 - Rewrite relative `/docs/...` links to absolute `<site-base>` URLs
 - Capture all `<Aside>` / `:::tip` / "X vs Y" / rules-of-thumb sections
 - Never fabricate; flag uncertainty with [UNCLEAR: reason]
+- Before writing any claim that something is missing or not found, read the two-key search rule in `${CLAUDE_PLUGIN_ROOT}/references/research-prompt.md` (Quality Standards, the bullet beginning "Before claiming that something the text should contain is absent"), apply it to the files you were given in place of the chunk, and name the keys you searched in the flag. A link to a page outside your group is a cross-reference, not an absence: keep it, and never flag it as missing
 
 ## Extraction Methodology
 [full contents of docs-extraction-prompt.md inlined here]
