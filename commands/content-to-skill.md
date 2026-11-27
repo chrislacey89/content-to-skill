@@ -312,7 +312,7 @@ You are checking the uncertainty and absence flags in a book's extractions again
 4. Search ALL chunk files for each key: /tmp/content-to-skill/<name>/chunks/chunk_*.txt (use Grep with line numbers). Read the lines around each hit to confirm it is the item itself, not just a passing mention.
 5. Rewrite each flag in place in its extraction file:
    - Found, and the claim is a forward reference to a later chunk → leave the extraction as it is (the content belongs to that later chunk's own extraction); record it only in the step 6 table as resolved
-   - Found, any other claim → replace the flag with the content it was missing, cited per the extraction's style, followed by [RESOLVED: found at chunk_NNN.txt:LINE]
+   - Found, any other claim → replace the flag with the content it was missing, cited per the extraction's style. Leave no marker, chunk name, or line number in the extraction; the chunk and line go only in the step 6 table's Evidence column
    - Not found → [UNCLEAR (verified-absent): <original reason>; searched "<key1>", "<key2>", ... across all chunks]
    - No usable key (the flag is about meaning, not a missing item) → [UNCLEAR (unverified): <original reason>]
    A promise that a later chunk does not deliver is a true gap: keep it as verified-absent.
