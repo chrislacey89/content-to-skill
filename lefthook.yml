@@ -1,0 +1,15 @@
+pre-commit:
+  parallel: true
+  commands:
+    format-and-lint:
+      run: npx @biomejs/biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      stage_fixed: true
+    test:
+      run: npm run test
+    secret-scan:
+      run: gitleaks git --pre-commit --staged --redact
+
+pre-push:
+  commands:
+    dependency-audit:
+      run: npm audit

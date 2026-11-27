@@ -6,3 +6,13 @@ node_modules/
 site/node_modules/
 site/dist/
 site/.astro/
+
+# Pipeline markers (/init-pipeline)
+.claude/.tdd-active
+.claude/.tdd-skipped
+.claude/.lfg-active
+.claude/.post-review-edit
+.claude/.ralph-checked
+.claude/.review-stamped
+.claude/.fix-findings-active
+.claude/.session
