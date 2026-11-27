@@ -43,7 +43,7 @@ Copy the appropriate checklist and update as you complete each step.
 - [ ] Step 1.5: Choose citation style, genre, and category
 - [ ] Step 2: Chunk document
 - [ ] Step 2b: Extract source images
-- [ ] Step 3: Extract content (Pass 1 — per-chunk, Pass 2 — cross-reference, Pass 3 — distillation)
+- [ ] Step 3: Extract content (Pass 1 — per-chunk, Pass 1.5 — flag verification, Pass 2 — cross-reference, Pass 3 — distillation)
 - [ ] Step 4: Synthesize
 - [ ] Step 5: Convert to skill (includes book.json)
 - [ ] Step 5a: Select and embed source images
@@ -84,6 +84,7 @@ If you have lost context (e.g., after compaction), reconstruct state by reading 
 3. If `pipeline` is `"repo"`, follow the **Repo Pipeline** steps (1R-6R). Check for `extraction-*.md` files to determine extraction progress.
 4. If `pipeline` is `"book"` (or absent — legacy), follow the **Book Pipeline**:
    - Check `citationStyle` — if missing and step is `"citation-style"`, resume at Step 1.5; `confirmedCategory` should also be set by the end of Step 1.5
+   - If step is `"verifying-flags"`, resume at Pass 1.5 (re-run it; rewriting a flag already marked `RESOLVED` or `verified-absent` is a no-op). If step is `"cross-referencing"`, `flag-verification.md` exists and Pass 2 is next
    - Read `/tmp/content-to-skill/<name>/running-context.md` — the extraction state (built by Pass 2)
    - Read `/tmp/content-to-skill/<name>/book-spine.md` — chapter summaries (built by Pass 2)
    - Check for `distilled-chunk-*.md` files — if present, Pass 3 has started or completed
@@ -257,6 +258,7 @@ You are extracting knowledge from a book chunk. Follow the methodology exactly.
 ## Hard Constraints
 - Never fabricate content not present in the source chunk
 - Flag uncertain content with [UNCLEAR: reason]
+- Before writing any claim that something is missing or not found, follow the methodology's two-key search rule (Quality Standards) and name the keys you searched in the flag
 - If the chunk is unreadable, write an Extraction Error block and return "Chunk NNN: EXTRACTION ERROR"
 - Preserve exact quotes for definitional statements
 
@@ -284,9 +286,53 @@ See the "Genre-Specific Extraction Strategies" section in the methodology for th
    - Update `progress.json` with `lastCompletedBatch: B`
 6. Repeat for the next batch until all chunks are processed
 
+After the last batch, update `progress.json`:
+```json
+{ "step": "verifying-flags", "citationStyle": "chapter|page", "status": "in_progress", ... }
+```
+
+### Pass 1.5 — Flag Verification
+
+A Pass 1 agent sees one chunk, so its "not found" can be wrong: the item may sit elsewhere in the same chunk under a key it did not search, or in another chunk entirely (a forward reference such as "covered in Chapter N" can only be checked against later chunks). This pass checks every such claim against the chunk text before Pass 2 turns it into an Unresolved Thread.
+
+Spawn ONE subagent via `Task` with `subagent_type: "general-purpose"` (do NOT pass a `model` parameter):
+
+```
+You are checking the uncertainty and absence flags in a book's extractions against the source text.
+
+## Task
+1. Use Glob to find all extraction files: /tmp/content-to-skill/<name>/extraction-chunk-*.md
+2. Collect every claim to check:
+   - every [UNCLEAR: ...] flag
+   - every statement that something the text should contain is missing, not found, not defined, or not given an entry
+   - every forward reference to coverage the author promises later ("covered in Chapter N", "we will return to this")
+   Skip [UNCLEAR: exact chapter/page] locator flags; they are about citation position, not content.
+   Skip any flag already marked `(verified-absent)` or `(unverified)`: an earlier run checked it. Do not search for it or rewrite it, but still copy its earlier result into the table in step 6 (keys searched from the flag, result as marked).
+3. For each claim, pick at least two search keys by the two-key search rule in the Quality Standards of ${CLAUDE_PLUGIN_ROOT}/references/research-prompt.md (Read it first). Add any keys the flag already names.
+4. Search ALL chunk files for each key: /tmp/content-to-skill/<name>/chunks/chunk_*.txt (use Grep with line numbers). Read the lines around each hit to confirm it is the item itself, not just a passing mention.
+5. Rewrite each flag in place in its extraction file:
+   - Found, and the claim is a forward reference to a later chunk → leave the extraction as it is (the content belongs to that later chunk's own extraction); record it only in the step 6 table as resolved
+   - Found, any other claim → replace the flag with the content it was missing, cited per the extraction's style. Leave no marker, chunk name, or line number in the extraction; the chunk and line go only in the step 6 table's Evidence column
+   - Not found → [UNCLEAR (verified-absent): <original reason>; searched "<key1>", "<key2>", ... across all chunks]
+   - No usable key (the flag is about meaning, not a missing item) → [UNCLEAR (unverified): <original reason>]
+   A promise that a later chunk does not deliver is a true gap: keep it as verified-absent.
+6. Write /tmp/content-to-skill/<name>/flag-verification.md:
+   ## Flag Verification
+   | Extraction | Claim | Keys searched | Result | Evidence |
+   |---|---|---|---|---|
+   | extraction-chunk-NNN.md | <claim> | "<key1>", "<key2>" | resolved / verified-absent / unverified | chunk_NNN.txt:LINE, or "none" |
+   If there were no claims to check, write the heading and "No flags to verify."
+7. Return a one-line summary: "Flags: N checked — R resolved, A verified-absent, U unverified"
+```
+
+Wait for this subagent to complete, then report its summary and update `progress.json`:
+```json
+{ "step": "cross-referencing", "citationStyle": "chapter|page", "status": "in_progress", ... }
+```
+
 ### Pass 2 — Cross-Reference Enrichment
 
-After ALL chunks are extracted, spawn ONE subagent via `Task` with `subagent_type: "general-purpose"` (do NOT pass a `model` parameter).
+After flag verification completes, spawn ONE subagent via `Task` with `subagent_type: "general-purpose"` (do NOT pass a `model` parameter).
 
 **Before spawning**, replace `{citationStyle}` in the prompt below with the actual value from `progress.json` (`"chapter"` or `"page"`).
 
@@ -302,7 +348,7 @@ If the Pass 1 extractions used adapted citations (e.g., Book/Part/Canto referenc
 
 ## Task
 1. Use Glob to find all extraction files: /tmp/content-to-skill/<name>/extraction-chunk-*.md
-2. Read each extraction file in order (chunk-001, chunk-002, etc.)
+2. Read each extraction file in order (chunk-001, chunk-002, etc.), then read /tmp/content-to-skill/<name>/flag-verification.md
 3. Build and write these files:
 
    /tmp/content-to-skill/<name>/running-context.md:
@@ -312,7 +358,8 @@ If the Pass 1 extractions used adapted citations (e.g., Book/Part/Canto referenc
    ### Key Concepts (top 15)
    - [Term]: [brief definition] (per citation style used in extractions)
    ### Unresolved Threads (max 5)
-   - [Topic the author promised to address later]
+   - [Topic the author promised to address later] (verified | unverified)
+     Label each thread `verified` when flag-verification.md shows it was searched for across all chunks and stayed absent, and `unverified` otherwise. Never list a claim flag-verification.md marks `resolved`: the item is in the text.
    ### Recurring Themes (3-5)
    - [Theme]: [how it's developing across chapters]
 
@@ -759,6 +806,7 @@ You are extracting the teaching content from a code exercise. Follow the methodo
 ## Hard Constraints
 - Never fabricate content not present in the source files
 - Flag uncertain content with [UNCLEAR: reason]
+- Before writing any claim that something is missing or not found, read the two-key search rule in `${CLAUDE_PLUGIN_ROOT}/references/research-prompt.md` (Quality Standards, the bullet beginning "Before claiming that something the text should contain is absent"), apply it to the files you were given in place of the chunk, and name the keys you searched in the flag
 - Preserve exact code for before/after examples — do not paraphrase code
 - Focus on the delta between problem and solution — this is where the learning lives
 
@@ -1083,6 +1131,7 @@ Example: `manifest.docsRoot = "content/src/content/docs/docs"`, `file.relPath = 
 - Rewrite relative `/docs/...` links to absolute `<site-base>` URLs
 - Capture all `<Aside>` / `:::tip` / "X vs Y" / rules-of-thumb sections
 - Never fabricate; flag uncertainty with [UNCLEAR: reason]
+- Before writing any claim that something is missing or not found, read the two-key search rule in `${CLAUDE_PLUGIN_ROOT}/references/research-prompt.md` (Quality Standards, the bullet beginning "Before claiming that something the text should contain is absent"), apply it to the files you were given in place of the chunk, and name the keys you searched in the flag. A link to a page outside your group is a cross-reference, not an absence: keep it, and never flag it as missing
 
 ## Extraction Methodology
 [full contents of docs-extraction-prompt.md inlined here]

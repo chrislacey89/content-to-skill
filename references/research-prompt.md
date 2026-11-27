@@ -149,6 +149,7 @@ Every quote MUST include its citation. If the exact location cannot be determine
 
 - Never fabricate or infer content not present in the source chunk.
 - When uncertain about a term or concept, flag it with `[UNCLEAR: reason]`.
+- Before claiming that something the text should contain is absent (a bibliography or reference entry, a definition, a section the author promises), search the chunk by at least two different keys. Search the term as written, plus the keys the item would be filed under. A reference list is ordered by author and title, so the term as cited in the running text may never appear in it: search the author's surname and distinctive title words too. A definition may use a variant of the word: search the defined word and its variants. A promised section may be titled differently from how the author names it: search the topic's key terms. Name the keys you searched in the flag, for example `[UNCLEAR: no bibliography entry; searched "<term>", "<surname>"]`. If any key finds the item, it is not absent: extract it instead of flagging it.
 - Preserve exact quotes for definitional or particularly powerful statements.
 - Every direct quote must include a chapter number, page number, or structural locator. Never output a bare quote without attribution.
 - If a chunk is unreadable or has OCR issues, output an Extraction Error block:
