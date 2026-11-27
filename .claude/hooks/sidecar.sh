@@ -1,0 +1,3759 @@
+#!/usr/bin/env bash
+# sidecar.sh — find, create, read, and commit to a project's sidecar.
+#
+# A sidecar is a private git repository outside the project's tree, at
+# ${SKILL_KIT_SIDECAR_ROOT:-$HOME/.claude/sidecars}/<name>/, holding the pack's
+# per-project configuration (sidecar.json), the research archive (research/),
+# solutions entries (solutions/<category>/), /fix-findings' run records
+# (fix-runs/), /respond-to-review's records (review-responses/), and
+# /handoff's docs (handoffs/). This
+# script is the only thing
+# that computes a sidecar path or runs git against one; skills call it from
+# their bundled references/sidecar.sh and never inline either.
+#
+# Usage:
+#   sidecar.sh resolve
+#   sidecar.sh init [--name <n>] --mode <owned|guest> --write <sidecar|in-tree|ask> --in-tree-path <path|none>
+#                   [--migrate-archive | --no-migrate-archive] [--archive-alias <dir>]...
+#   sidecar.sh config get <dotted.key>
+#   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
+#   sidecar.sh config set base_ref <branch>   (refuses a branch that resolves to no ref)
+#   sidecar.sh config set system <label>   (joins this project's group for related-solutions-dirs; "" leaves it)
+#   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager|runtime_check|test_changed> <cmd>   ("" declares none)
+#   sidecar.sh config set verify.hazards <json-array>   (each entry {reason, command?}; [] declares none)
+#   sidecar.sh config set conventions <json-array>   (one string per line of house style; [] declares none)
+#   sidecar.sh config set design <json {ref, note?}>   (one pointer the pack names and never fetches; "" declares none)
+#   sidecar.sh profile   (the repo-facts block a brief pastes: base ref, verify commands, hazards, conventions)
+#   sidecar.sh base-ref [--name] [--no-pr]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name; --no-pr skips the open PR's base)
+#   sidecar.sh range [<W-n>]   (the commits a slice's review covers: <start_sha>..HEAD, or <base-ref>..HEAD)
+#   sidecar.sh path <research|solutions|review-responses|handoffs>
+#   sidecar.sh solutions-dirs   (prints, one per line, the directories to search for lessons; no sidecar needed)
+#   sidecar.sh relate <path-to-other-checkout>   (links one project outside the group for related-solutions-dirs; prints the key stored)
+#   sidecar.sh related-solutions-dirs   (prints, one per line, the group's and the linked projects' solutions dirs; no sidecar needed)
+#   sidecar.sh migrate-archive [--archive-alias <dir>]...   (init's archive migration, for a sidecar that already exists; safe to re-run)
+#   sidecar.sh archive-dir   (prints <archive root>/<suggested name>; no sidecar needed)
+#   sidecar.sh commit -- <path>... -m <msg>
+#   sidecar.sh require <path> --from <referrer>   (on a hit, prints the absolute resolved path)
+#   sidecar.sh backend <prds|slices|stamp>   (prints github or sidecar; github when no sidecar resolves)
+#   sidecar.sh stamp write <branch> <sha> [--base-ref <ref>]
+#   sidecar.sh stamp read <branch>   (prints the 40-hex SHA, or nothing with exit 0)
+#   sidecar.sh stamp released <branch> [--reason]   (prints the head stamp release recorded, or with --reason its reason; nothing with exit 0)
+#   sidecar.sh stamp clear <branch>
+#   sidecar.sh stamp release <branch> --reason <why>   (opens the post-review edit lock on record, on either backend; never writes a stamp)
+#   sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>] [--work <W-n>]
+#   sidecar.sh fixrun list <branch> [--range <rev-range>]   (one "<sha> <run-id> <thread-url|->" line per record)
+#   sidecar.sh footprint <rev-range> [--accept "<short sha> ..."]   (prints each pack marker in the range's commit messages; exit 1 on any, 2 if unread; no sidecar needed)
+#   sidecar.sh work create --kind <prd|slice> [--parent W-n] [--blocked-by W-n,...] [--milestone <str>]
+#                          [--maturity <roadmap bet|research-ready|prd>] --body-file <f>   (prints the new id)
+#   sidecar.sh work view <W-n> [--json]
+#   sidecar.sh work edit <W-n> --body-file <f>   (refuses a body shorter than the one it replaces)
+#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|blocked_by|pr|pr_mode|branch|reviewed_sha|start_sha> <value>
+#                       (state: open, built, or closed; pr_mode: pr, or none for a branch that gets no PR of its own)
+#   sidecar.sh work comment <W-n> --body-file <f>
+#   sidecar.sh work close <W-n> [--superseded-by W-m]
+#   sidecar.sh work lesson <W-n> <lesson-path>   (adds the path to the lessons list once; a repeat is a no-op)
+#   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--branch <name>] [--unblocked] [--state <open|built|closed|all>]
+#                        (open, the default, is every item not closed, built among them)
+#   sidecar.sh work pr-mode [<W-n>] [--branch <name>]   (prints "none <W-n>" when <W-n> or an item not closed on the branch records pr_mode none, else "pr"; read-only)
+#   sidecar.sh lessons match <path>... [--record <start|changed>]   (the lessons whose paths name these files or a folder above them; --record appends the run to lookups/)
+#   sidecar.sh lessons check [<lesson-file>]   (loose ends, one "<kind><TAB><lesson><TAB><detail>" line each, then "loose ends: <n>"; read-only)
+#   sidecar.sh lessons audit [--branch <name>]   (self-check, coverage, group, loose ends, and per-branch runs; --branch prints that branch's runs line only; read-only)
+#   sidecar.sh lessons flag <lesson-file> --for <path> --reason <text>   (records in lesson-flags.jsonl that a returned lesson does not apply; never edits it)
+#   sidecar.sh lessons flag <lesson-file> --keep <entry>   (records that a person kept the flagged entry, which settles its flags)
+#   sidecar.sh lessons propose <lesson-file>   (the paths and related lines /compound's guided pass offers for an older lesson; never replaces; read-only)
+#   sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]   (a record's neighbors, both directions, one hop; read-only)
+#
+# backend. The routing rule is docs/state-backend.md's: prds and slices go to
+# GitHub when forge.write contains "issues", the stamp when it contains "prs",
+# and only when forge.kind is github, because every consumer of the github
+# answer runs `gh`. Anything else is sidecar. No sidecar is github, which is
+# the behavior before the sidecar existed.
+#
+# stamp. <sidecar>/reviews/<slug>.json holds the review stamp on the sidecar
+# backend. The slug keeps [a-z0-9._-] and writes every other byte as %XX
+# (uppercase hex), so it is reversible and two branches differing only in case
+# cannot share a file on a case-insensitive filesystem. read matches on the
+# JSON branch field, and prints nothing for a stamp it cannot parse or whose
+# reviewed_sha is not 40 lowercase hex. /pre-merge is the only skill that
+# writes one (scripts/test-review-currency-marker.sh).
+#
+# stamp release. The route past the post-review edit lock for an edit that is
+# not a finding. It refuses, changing nothing, with no reason, for a branch that
+# is not checked out, or with no stamp to release: the sidecar's, or on the
+# github backend the PR body's marker, read with gh. It writes
+# .claude/.post-review-edit (branch, released_at, head, reason, one key=value
+# line each) and removes .claude/.review-stamped, both under $CLAUDE_PROJECT_DIR,
+# else the top level, as the hook reads them. On the sidecar backend it first
+# commits the same record as reviews/released/<slug>.json, a directory of its
+# own because <branch>.released is itself a branch name; stamp write and stamp
+# clear remove it. On the github backend the marker is the only record.
+#
+# fixrun. <sidecar>/fix-runs/<slug>.jsonl holds one line per /fix-findings fix
+# commit on the sidecar backend, {branch, run, sha, thread?, work?}, where the
+# github backend puts Fix-Findings-Run: and Review-Thread: lines in the commit
+# itself. work is the id of the item the fix serves, when the caller knows it; a
+# branch does not identify one, so a record without it is the branch's alone.
+# list prints the same three fields whether or not a record carries work.
+# list --range keeps only records whose commit is in the range, so a fold that
+# rewrites a SHA drops its record the way it drops the github trailer.
+#
+# lookups. <sidecar>/lookups/<slug>.jsonl holds one line per recorded
+# `lessons match --record` run on a branch, {at, branch, phase, files,
+# scanned, with_paths, projects, matched, outcome}, written and committed by
+# the command itself. outcome is matched, none, no-files, or failed; a failed
+# lookup is recorded before its nonzero exit. A detached HEAD, a missing
+# sidecar, or a failed write records nothing and says why on the receipt.
+# Lesson names are private sidecar content: nothing copies this file into a PR.
+#
+# footprint. Scans commit messages, not the sidecar: a fixup!/squash!/amend!
+# subject, a Fix-Findings-Run: or Review-Thread: line, a W-<n> id, or /<skill>
+# for any name in PACK_SKILLS. docs/state-backend.md states the rule it checks.
+# --accept skips the commits whose short SHAs (as footprint printed them) the
+# operator confirmed are false matches, such as a client's /help route.
+#
+# work. <sidecar>/work/W-<n>.md is a PRD or slice on the sidecar backend: YAML
+# frontmatter between --- lines, the body, then "## Comment <ISO-8601>"
+# sections, which `work comment` alone appends. Frontmatter is written one
+# "key: value" per line in a fixed order: ids, enums, and dates plain, lists
+# as [W-1, W-2] (lessons holds paths, added by `work lesson`), free strings (milestone, pr, branch) as JSON strings, so the reader
+# below can parse what the writer writes without a YAML library. A new id is
+# max(existing)+1, claimed by hard-linking a finished temp file to W-<n>.md,
+# which fails if another writer got there first; the loser takes the next
+# number. decomposed_into and blocked_by are replaced on every set, never
+# appended to; a set blocked_by is validated as create's is, and refused when
+# it would make a cycle. edit compares byte counts against the body it read
+# and refuses a shorter one. A body may not contain a comment heading, because
+# the reader splits on it.
+# The id regex is WORK_ID_RE, the one docs/state-backend.md states.
+#
+# require resolution order. The first candidate that exists wins; each step runs
+# only when the one before found nothing.
+#   1. <path> as given, relative to the current directory. A leading "~/" is
+#      expanded to $HOME; "~user/" and a bare "~" are left alone, so they are
+#      looked up literally and miss. A "#anchor" suffix is stripped when <path>
+#      does not exist with it, so name.md#section finds name.md. So is a line
+#      suffix that is all line numbers (":12", ":12-20", ":12+", ":12, 30-31"),
+#      so name.md:12 finds name.md. A real name holding ":12" wins over the stripped
+#      name at every step below too, not only here.
+#   2. beside the referrer: dirname(<referrer>)/<path>, for a relative <path>.
+#   3. for a bare name (no "/"): <name> in each sibling category folder, that is
+#      dirname(dirname(<referrer>))/*/<name>, in glob (alphabetical) order. A name
+#      found in more than one prints a warning naming every match on stderr, then
+#      uses the first.
+# Steps 2 and 3 run only when <referrer> is an existing file. A "path:line" or a
+# prose referrer ("PRD #1") is only the label in the MISSING line, and disables
+# both. A hit prints the physical path (pwd -P: symlinked folders resolved) of
+# the file found; a miss prints "MISSING: <path> (referenced by <referrer>)" on
+# stderr and exits 1.
+#
+# trace. Reads, never writes: no file, no commit (chrislacey89/skills#727). An
+# argument shaped like a work id is a work item, anything else a file. A work
+# item's edges come from every work file, parsed by the work verbs' own reader,
+# so an edge stored on one side (parent, blocked_by, superseded_by) is also
+# printed from the other. Its research comes from the body's "## Research
+# Reference" section (/write-a-prd writes it) and its "- **Research:**" line
+# (the slot /prd-to-issues gives a slice), and from the parent PRD's when a
+# slice has neither: nothing else records that link. Its fix runs come from
+# fix-runs/: every trusted record whose work names it, from any branch's file
+# (fix_runs), and the trusted records of its own branch's file that name no item
+# (branch_fix_runs), kept apart because a branch does not identify one item. A
+# lesson's citations come from its "## Related" section and its "Sibling docs:"
+# list, resolved as require resolves them, then from the lesson's own store root
+# (<category>/<name>.md), then from the project's top level. Its replaces and
+# related names resolve by file name across the project's stores and its
+# group's, and "replaced by" is derived from every such lesson's replaces. A neighbor that is
+# missing is printed as missing and never fails the call: exit 1 means the
+# subject itself is missing (or its store cannot be read).
+#
+# Exit codes: 0 success, 1 miss or refusal, 2 usage.
+#
+# Archive root. The pre-sidecar research archive lives under ARCHIVE_ROOT
+# below; this file is the only place that default is spelled. On a miss,
+# /research writes its entry to the directory archive-dir prints and
+# /write-a-prd lists it from there, so the two cannot name different places.
+#
+# Archive migration. init, by default, moves the files of each directory under
+# ARCHIVE_ROOT whose name matches this project into <sidecar>/research/, and
+# leaves a symlink at the old directory pointing there. --no-migrate-archive
+# skips it. A directory matches when its lowercased name is owner-repo cut from
+# a remote key, or, only when the checkout has no remote, the main checkout's
+# basename (the one form the old /research improvised, and only for repos
+# without a remote). A basename is not
+# project identity: a remote-less project archived as api/ must not be claimed
+# by an unrelated repo that happens to be checked out at .../api. A project
+# archived under its basename before it gained a remote opts that directory in
+# with --archive-alias <dir> (repeatable, matched lowercased, one path component).
+#
+# solutions-dirs policy. The directories a reader searches for lessons, one per
+# line: the sidecar's solutions/ (created if absent), then the project's
+# solutions.in_tree_path unless it is "none" (leading "./" and trailing "/"
+# stripped), then docs/solutions when that
+# directory exists in the tree and is not already listed (a /excavate PR commits
+# there whatever in_tree_path says). With no sidecar it prints docs/solutions
+# alone. In-tree entries are relative to the current directory.
+#
+# related-solutions-dirs policy. Lessons about something several repositories
+# share (a gateway, a bus, an internal library) land in one repo's sidecar.
+# solutions.system is this project's group label, which config set writes;
+# every other sidecar under the sidecar root carrying the same label is a
+# member, so membership is symmetric and a new repo joins by setting its own
+# key. A sibling's sidecar.json that cannot be read is named on stderr and
+# skipped, and a sibling with no well-formed label is not a member. Sidecars
+# are local, so a group reaches only the members on this machine.
+# solutions.related lists identity keys of other projects' sidecars, which
+# relate writes, for a single link outside the group. This verb prints the
+# solutions/ that exists of each member, in sidecar-name order, then of each
+# related key, in list order, each project once, and never creates one. One
+# hop: a related sidecar's own solutions.related and solutions.system are not
+# read. A key that matches no sidecar, or whose lookup fails, is named on
+# stderr and skipped, because a missing neighbor must not block planning
+# here. Nothing writes through these paths, and
+# solutions-dirs does not print them, so /compound's overlap check never
+# edits, dedupes against, or counts another project's entry. With no sidecar
+# it prints nothing. chrislacey89/skills#405's rule of one user and one
+# sidecar per project holds: every sidecar keeps its one writer.
+#
+# relate. Finds the sidecar of the checkout at <path> by that checkout's keys,
+# without resolving there (a resolve can commit new aliases into it), and
+# stores its root: key (else its first key) in this project's
+# solutions.related, once. Refuses a path that is no checkout, a checkout with
+# no sidecar, and this project itself.
+#
+# config set. forge.write is derived from mode (owned on a known forge gets
+# write access, guest gets none), so mode is changed through this verb and
+# never by editing sidecar.json. It overwrites forge.write with the derived
+# value. base_ref is the base branch's bare name (develop, not origin/develop),
+# checked against the same rule base-ref reads it with before it is written.
+# system is one sidecar-name-shaped label ([a-z0-9._-], no leading dot); ""
+# removes it. A label no other sidecar carries is written anyway and named on
+# stderr with the labels in use, because a mistyped label is a silent group of
+# one and the first member of a real group looks the same.
+# verify.<field> is a one-line command that is not all blanks; "" declares that
+# the repo has none.
+# verify.test_changed is optional: a command that takes paths as arguments and
+# runs the tests that read them. Absent means verify.test, so profile prints it
+# only once it is declared and never lists it under Not declared.
+# verify.hazards is a JSON array whose every entry has a non-empty one-line
+# reason and, optionally, a non-blank one-line command in Claude Code
+# permission-rule syntax (Bash(<pattern>)); no other keys. [] declares none.
+# conventions is a JSON array of non-blank one-line strings. Past
+# CONVENTIONS_WARN_LINES it is written anyway and named on stderr, because every
+# sub-agent brief pastes all of it, and how much is too much is the operator's call.
+# design is one JSON object: a ref, a URL or repo-relative path, and optionally
+# a note, each non-blank one-line text, and no other keys. "" stores {}, which
+# declares none: config get design then prints {} where an unasked key prints
+# nothing, and config get design.ref prints nothing for both. No verb here
+# fetches the ref, and profile never reads the key, so it reaches no brief.
+# A refused value writes nothing. The first verify, conventions, or design write on a
+# schema-1 sidecar moves it to schema 2 in the same commit, dropping the ""
+# values init used to stub, because in schema 1 those were never answers.
+#
+# profile. An absent key is unasked, and so is a verify key's "" in a schema-1
+# sidecar; on schema 2, "" and [] are declared none. The two never render the
+# same: a declared command prints under Verify, a convention prints verbatim
+# under Conventions, none prints as none, and an unasked key is named on the
+# Not declared line. Two outcomes: a block exits 0, including on a sidecar miss,
+# where every key is unasked and the Base ref line is base-ref's fallback;
+# could not look (no jq, base-ref failed, an unreadable sidecar.json, a verify
+# or conventions value of the wrong type, blank, or spanning lines) exits 1 and
+# prints no block.
+#
+# base-ref. An open PR for the current branch states its own target, and that
+# wins: gh pr view is asked for it only on a github.com remote whose stamp
+# backend is github, the places the pack already talks to GitHub, and a missing
+# gh, a failed read, or a PR that is not open falls through, silently, to what
+# follows. A PR base that resolves to no ref exits 1, as a declared one does.
+# --no-pr skips that read, for a caller asking for the repo's base rather than
+# this branch's PR target (/init-pipeline's base_ref question).
+# Otherwise a declared base_ref wins. A sidecar miss, or a sidecar with no
+# base_ref key, falls back to the derivation every skill used to inline:
+# origin/HEAD's branch, else the first of main master prod develop trunk that
+# resolves. The ref form is origin/<name> when that resolves, else the local
+# <name> with a note on stderr that it may be stale; --name prints <name>.
+# Three outcomes, as backend's: a value (declared or fallback) exits 0; could
+# not look (no jq, an unreadable sidecar.json, a base_ref that is not a
+# string) and a declared base_ref that resolves to no ref exit 1 and print
+# nothing, because the fallback answers "nothing declared", never "could not
+# read what was declared". No base branch found at all exits 1 as well.
+#
+# range. The commits one slice's review covers, as <left>..HEAD. With a work
+# item whose start_sha (the HEAD /execute recorded when the slice started) is
+# an ancestor of HEAD, contains the branch's fork point from the base
+# (merge-base of base-ref and HEAD is an ancestor of it) and has no merge
+# after it, the left end is start_sha, so a branch carrying several slices
+# reviews and counts only this one. Every other case falls back to
+# base-ref's ref, which is never narrower than the slice: no <W-n>, a sidecar
+# miss, the github slices backend (it has no work item to hold start_sha), or
+# an item with no start_sha. A start_sha that is no longer an ancestor of HEAD
+# (a fold or rebase rewrote it), or that is still one but predates the base's
+# newer commits (a rebase onto an advanced base, a merge from the base), also
+# falls back, with a notice on stderr naming the item; it is never re-anchored. Could not look (base-ref failed, an
+# unreadable sidecar.json or work item, a <W-n> the sidecar backend does not
+# hold) exits 1 and prints no range.
+#
+# Identity. A sidecar is found by the keys in its sidecar.json, tried in order:
+#   root:<sha>               lexicographically first root commit; skipped in a
+#                            shallow clone, whose root is not the real one
+#   remote:<host/full/path>  every remote with a host, lowercased, with the
+#                            scheme, user, port, trailing / and .git stripped;
+#                            local-path remotes carry no identity and are skipped
+#   path:<realpath>          the main checkout (not a linked worktree)
+# Every key is lowercased, because default APFS is case-insensitive and Linux
+# is not. On a hit, keys the current checkout has and the sidecar lacks are
+# appended and committed. No two sidecars may share a key: init refuses to
+# create a collision, and resolve warns when it finds one.
+#
+# Isolation. The script unsets GIT_DIR, GIT_WORK_TREE, and GIT_INDEX_FILE once,
+# at startup, so no git call it makes can see them. Git exports GIT_DIR into
+# hooks; left set, `git -C <sidecar> commit` exits 0 and lands the commit in the
+# project. Nothing here writes to the project's
+# tree or its .git, except stamp release's two flag files under .claude/, and
+# nothing pushes, pulls, or fetches.
+#
+# Requires git >= 2.31 (--path-format=absolute) and jq >= 1.6.
+#
+# scripts/test-sidecar-resolution.sh runs this file against scratch repos.
+
+set -u
+# An inherited CDPATH sends every `cd "<relative dir>"` below into another tree
+# and echoes it into the captured path; the paths this script prints must not
+# depend on the caller's shell.
+unset CDPATH
+# The Isolation guard. Once here rather than as `env -u` on every git call,
+# which cost a process per call. scripts/test-sidecar-resolution.sh replaces
+# this exact line with ":" to prove the guard is load-bearing, so keep it on one
+# line.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
+SIDECAR_ROOT="${SKILL_KIT_SIDECAR_ROOT:-$HOME/.claude/sidecars}"
+ARCHIVE_ROOT="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}"
+# Keys and paths are split on newlines only: a checkout path may contain spaces.
+IFS=$'\n'
+
+die_usage() { printf 'sidecar.sh: %s\n' "$1" >&2; exit 2; }
+refuse()    { printf 'sidecar.sh: %s\n' "$1" >&2; exit 1; }
+
+# git against the project, discovered from the cwd rather than from a leaked env
+# (the env is cleared at startup; see Isolation).
+pgit() { git "$@"; }
+# git against a sidecar.
+sgit() { local dir="$1"; shift; git -C "$dir" "$@"; }
+
+# Most input is already lowercase (SHAs, normalized remotes), so tr runs only
+# when there is a capital to fold. ${1,,} would avoid tr entirely, but macOS
+# ships bash 3.2. The pattern uses the same [:upper:] class tr folds.
+lower() {
+    case "$1" in
+        *[[:upper:]]*) printf '%s' "$1" | tr '[:upper:]' '[:lower:]' ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+# One path component, no newline: a newline would register two aliases.
+alias_ok() { case "$1" in ''|*/*|.|..|*$'\n'*) return 1 ;; esac; }
+
+# forge_kind_of <keys>: the forge a remote key's host belongs to, or none.
+forge_kind_of() {
+    local host
+    host="$(printf '%s\n' "$1" | sed -n 's/^remote:\([^/]*\)\/.*/\1/p' | head -n 1)"
+    case "$host" in
+        github.com|*.github.com) echo github ;;
+        gitlab.com|gitlab.*)     echo gitlab ;;
+        bitbucket.org)           echo bitbucket ;;
+        *)                       echo none ;;
+    esac
+}
+
+# derive_forge_write <mode> <forge_kind>: the forge.write JSON array. The one
+# place mode becomes write permission; init and config set both call it.
+derive_forge_write() {
+    if [ "$1" = "owned" ] && [ "$2" != "none" ]; then
+        printf '%s' '["issues","labels","milestones","prs"]'
+    else
+        printf '%s' '[]'
+    fi
+}
+
+# Normalize a remote URL to host/full/path, or print nothing.
+norm_remote() {
+    local u="$1" hostpart rest host
+    case "$u" in
+        file://*) return 0 ;;
+        *://*)
+            u="${u#*://}"
+            hostpart="${u%%/*}"
+            [ "$hostpart" = "$u" ] && return 0
+            rest="${u#*/}"
+            host="${hostpart##*@}"
+            host="${host%%:*}"
+            ;;
+        *:*)
+            # scp-like [user@]host:path — git reads it so only when no / precedes the colon
+            hostpart="${u%%:*}"
+            case "$hostpart" in */*) return 0 ;; esac
+            rest="${u#*:}"
+            host="${hostpart##*@}"
+            ;;
+        *) return 0 ;;
+    esac
+    while [ "${rest%/}" != "$rest" ]; do rest="${rest%/}"; done
+    rest="${rest%.git}"
+    while [ "${rest%/}" != "$rest" ]; do rest="${rest%/}"; done
+    while [ "${rest#/}" != "$rest" ]; do rest="${rest#/}"; done
+    if ! { [ -n "$host" ] && [ -n "$rest" ]; }; then return 0; fi
+    lower "$host/$rest"
+}
+
+# probe_repo: one rev-parse for the three facts every resolve needs (in a repo
+# at all, shallow or not, the common git dir), where there used to be three.
+# The result is cached per $PWD, because relate reads another checkout's keys
+# from a cd'd subshell. A subshell inherits the parent's cache but cannot fill
+# it, so the dispatcher at the bottom of this file probes once before running
+# any command; that call is what every $(do_resolve) below saves on.
+PROBE_PWD="" PROBE_RC=1 PROBE_SHALLOW="" PROBE_COMMON=""
+probe_repo() {
+    local out
+    if [ "$PROBE_PWD" != "$PWD" ]; then
+        PROBE_PWD="$PWD"
+        if out="$(pgit rev-parse --is-shallow-repository --path-format=absolute --git-common-dir 2>/dev/null)"; then
+            PROBE_RC=0
+            PROBE_SHALLOW="${out%%$'\n'*}"
+            PROBE_COMMON="${out#*$'\n'}"
+        else
+            PROBE_RC=1 PROBE_SHALLOW="" PROBE_COMMON=""
+        fi
+    fi
+    return "$PROBE_RC"
+}
+
+in_repo() { probe_repo; }
+
+main_checkout() {
+    local common parent
+    probe_repo || return 1
+    common="$PROBE_COMMON"
+    if [ "${common##*/}" = ".git" ]; then
+        parent="${common%/*}"
+        (cd "${parent:-/}" && pwd -P)
+    else
+        (cd "$(pgit rev-parse --show-toplevel)" && pwd -P)
+    fi
+}
+
+# Print the current checkout's keys, one per line, in resolution order.
+# Prints the shallow notice on stderr when it skips the root key.
+current_keys() {
+    local root r url n mc
+    probe_repo
+    if [ "$PROBE_SHALLOW" = "true" ]; then
+        printf 'sidecar.sh: shallow clone — skipping the root: key, resolving by remote or path\n' >&2
+    else
+        root="$(pgit rev-list --max-parents=0 HEAD 2>/dev/null | LC_ALL=C sort | head -n 1)"
+        [ -n "$root" ] && printf 'root:%s\n' "$(lower "$root")"
+    fi
+    for r in $(pgit remote 2>/dev/null); do
+        url="$(pgit remote get-url "$r" 2>/dev/null)" || continue
+        n="$(norm_remote "$url")"
+        [ -n "$n" ] && printf 'remote:%s\n' "$n"
+    done
+    mc="$(main_checkout)" && [ -n "$mc" ] && printf 'path:%s\n' "$(lower "$mc")"
+}
+
+# keys_list, the one reading of a sidecar.json "keys" both ownership readers
+# share: absent or null is an empty list, an array is itself, and any other
+# shape is an error, so the file is refused like a corrupt one. `// []` alone
+# let a string through to `index`, which searches a string as a substring
+# (claiming any key it contains, and a clean miss for one it does not), and
+# read `false` as an empty list (chrislacey89/skills#746).
+KEYS_LIST_JQ='def keys_list: if . == null then [] elif type == "array" then . else error("keys is \(type), not an array") end; '
+
+# file_lists_key <file> <key>: jq's status for whether <file>'s "keys" holds
+# <key>: 0 yes, 1 no, anything else unread. --slurp reads the whole file as an
+# array of its values, so a file holding no value or several is an error rather
+# than an answer from whichever value jq read last.
+file_lists_key() {
+    jq -e -s --arg k "$2" "$KEYS_LIST_JQ"'
+        if length != 1 then error("holds \(length) JSON values, not one")
+        else .[0].keys | keys_list | index($k) != null end' "$1" >/dev/null 2>&1
+}
+
+# Sidecar directories whose sidecar.json carries key $1, one per line.
+# file_lists_key answers 0 or 1, so any other status is an error: the file is
+# corrupt, unreadable, or holds other than one JSON value, which is not a miss. Such a file cannot be
+# ruled out as the key's owner without parsing it, so when no readable sidecar
+# claims the key this returns 2 and names it; when one does, the key is owned
+# and the unreadable file is only named, as a warning (chrislacey89/skills#530: one corrupt
+# sidecar.json used to refuse every lookup in every repo). A caller must check
+# the status; `$(owners_of …)` inside a pipeline discards it.
+#
+# The scan walks directories, not "$SIDECAR_ROOT"/*/sidecar.json: a glob never
+# matches a path under a directory it cannot search, so a sidecar directory at
+# mode 000 or 444 used to drop out of the scan and read as a miss, which
+# `backend` answers with `github` (chrislacey89/skills#542). A directory that
+# cannot be entered is unread, like a corrupt file, and so are a sidecar.json
+# that is present but not a regular file and an entry that is a symlink to
+# nothing; a directory with no sidecar.json is skipped.
+#
+# The loop below starts one jq per sidecar for each key it is asked about. A
+# caller about to ask about several keys runs owners_scan first, which answers
+# them all with one jq over every sidecar; owners_of then reads that answer.
+owners_of() {
+    local key="$1" k d f rc hits="" unread=""
+    if scan_covers "$key"; then
+        while IFS=$'\t' read -r _ k d; do
+            [ "$k" = "$key" ] && printf '%s\n' "$d"
+        done <<<"$SCAN_HITS"
+        return 0
+    fi
+    # A root that exists but cannot be listed and entered hides every sidecar
+    # in it, and so does a symlink to nothing at the root path: only a
+    # root path that holds nothing at all is a miss.
+    if { [ -e "$SIDECAR_ROOT" ] || [ -L "$SIDECAR_ROOT" ]; } && ! { [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ]; }; then
+        printf 'sidecar.sh: cannot list %s; refusing to treat it as a miss\n' "$SIDECAR_ROOT" >&2
+        return 2
+    fi
+    for d in "$SIDECAR_ROOT"/*; do
+        # A symlink to nothing never matched the */ this loop used to walk, so
+        # it read as a miss; it is present and unreadable.
+        if [ -L "$d" ] && [ ! -e "$d" ]; then
+            unread="${unread:+$unread$'\n'}$d (a symlink to nothing)"
+            continue
+        fi
+        [ -d "$d" ] || continue
+        f="$d/sidecar.json"
+        if [ ! -x "$d" ]; then
+            unread="${unread:+$unread$'\n'}$d (cannot enter the directory)"
+            continue
+        fi
+        if [ ! -f "$f" ]; then
+            # Present but not a regular file, such as a symlink whose target
+            # is gone: as unparseable as a corrupt one, so not a miss.
+            if [ -L "$f" ] || [ -e "$f" ]; then
+                unread="${unread:+$unread$'\n'}$f (not a readable regular file)"
+            fi
+            continue
+        fi
+        rc=0
+        file_lists_key "$f" "$key" || rc=$?
+        case "$rc" in
+            0) hits="${hits:+$hits$'\n'}$d" ;;
+            1) ;;
+            *) unread="${unread:+$unread$'\n'}$f (jq exited $rc)" ;;
+        esac
+    done
+    if [ -n "$unread" ]; then
+        if [ -z "$hits" ]; then
+            printf '%s\n' "$unread" | while IFS= read -r f; do
+                printf 'sidecar.sh: cannot read %s; refusing to treat it as a miss\n' "$f" >&2
+            done
+            return 2
+        fi
+        printf '%s\n' "$unread" | while IFS= read -r f; do
+            printf 'sidecar.sh: warning: cannot read %s; ignored, because a readable sidecar claims %s\n' "$f" "$key" >&2
+        done
+    fi
+    [ -z "$hits" ] || printf '%s\n' "$hits"
+}
+
+# owners_scan <key>...: owners_of's answer for every key, from one jq over all
+# sidecars, held in SCAN_HITS as "H<TAB>key<TAB>dir" lines. It answers only
+# when every sidecar is plainly readable, so it never has an unread file to
+# report: on anything owners_of names (a root it cannot list, a directory it
+# cannot enter, a symlink to nothing, a sidecar.json that is not a regular file, one holding no JSON
+# value or several (each file is parsed on its own, so a value split across two files is corrupt in both), or a "keys" that is not an array) it records
+# nothing, and owners_of reads file by file and names the problem as before. The answer is
+# the sidecars as they were when it ran, so a caller runs scan_clear before it
+# writes a sidecar.json. Within a $(...) the answer is inherited, never filled.
+SCAN_KEYS="" SCAN_HITS=""
+scan_clear() { SCAN_KEYS="" SCAN_HITS=""; }
+scan_covers() { case "$SCAN_KEYS" in *$'\n'"$1"$'\n'*) return 0 ;; esac; return 1; }
+owners_scan() {
+    local d f k out first files=() keyset=$'\n'
+    scan_clear
+    for k in "$@"; do
+        case "$k" in ''|*$'\n'*|*$'\t'*) return 0 ;; esac
+        keyset="$keyset$k"$'\n'
+    done
+    [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ] || return 0
+    for d in "$SIDECAR_ROOT"/*; do
+        if [ -L "$d" ] && [ ! -e "$d" ]; then return 0; fi
+        [ -d "$d" ] || continue
+        f="$d/sidecar.json"
+        [ -x "$d" ] || return 0
+        if [ ! -f "$f" ]; then
+            if [ -L "$f" ] || [ -e "$f" ]; then return 0; fi
+            continue
+        fi
+        files+=("$f")
+    done
+    if [ "${#files[@]}" -gt 0 ]; then
+        # Each file goes in as its own --rawfile string and is parsed on its
+        # own with fromjson, so a value cannot run from one file into the next
+        # (jq reads files named on its command line as one stream, and
+        # `printf 1 >c; printf 2 >d; jq -n '[inputs]' c d` yields [12]).
+        # fromjson errors on a string holding no JSON value or several, and on
+        # corrupt JSON, and any error fails the whole jq: the caller falls back.
+        # --rawfile and $ARGS.named (which carries it) are in jq 1.6.
+        local jqargs=() i=0
+        for f in "${files[@]}"; do
+            jqargs+=(--rawfile "f$i" "$f" --arg "p$i" "$f")
+            i=$((i + 1))
+        done
+        out="$(jq -n -r --argjson n "${#files[@]}" "$KEYS_LIST_JQ"'
+            $ARGS.named as $a
+            | [range(0; $n) | {f: $a["p\(.)"], d: ($a["f\(.)"] | fromjson)}]
+            | ("N\t\(length)"),
+              (.[] | .f as $f | ((.d.keys | keys_list) as $k
+                | $ARGS.positional[] as $x | select(($k | index($x)) != null)
+                | "H\t\($x)\t\($f | rtrimstr("/sidecar.json"))"))' "${jqargs[@]}" --args "$@" 2>/dev/null)" || return 0
+        first="${out%%$'\n'*}"
+        [ "$first" = "N"$'\t'"${#files[@]}" ] || return 0
+        case "$out" in *$'\n'*) SCAN_HITS="${out#*$'\n'}" ;; esac
+    fi
+    SCAN_KEYS="$keyset"
+}
+
+# scan_or_jq_has <dir> <key>: whether <dir>'s sidecar.json lists <key>, from
+# owners_scan's answer when it covers the key, else by reading the file.
+scan_or_jq_has() {
+    if scan_covers "$2"; then
+        case $'\n'"$SCAN_HITS"$'\n' in *$'\n'"H"$'\t'"$2"$'\t'"$1"$'\n'*) return 0 ;; esac
+        return 1
+    fi
+    file_lists_key "$1/sidecar.json" "$2"
+}
+
+# Sidecar names and system labels share one shape.
+label_ok() { case "$1" in ''|.*|*/*|*[!a-z0-9._-]*) return 1 ;; esac; }
+
+# "<label><TAB><sidecar dir>", one line per sidecar with a well-formed system
+# label, in sidecar-name order. Unlike owners_of, nothing here can claim an
+# identity, so a sidecar it cannot read is only named on stderr and skipped.
+system_labels() {
+    local d f label
+    for d in "$SIDECAR_ROOT"/*; do
+        # A dangling symlink is not a directory, and could be a member: name it.
+        if [ -L "$d" ] && [ ! -e "$d" ]; then
+            printf 'sidecar.sh: cannot read %s (dangling symlink); skipped\n' "$d" >&2
+            continue
+        fi
+        [ -d "$d" ] || continue
+        f="$d/sidecar.json"
+        if [ ! -x "$d" ]; then
+            printf 'sidecar.sh: cannot read %s (cannot enter the directory); skipped\n' "$d" >&2
+            continue
+        fi
+        if [ ! -f "$f" ]; then
+            if [ -L "$f" ] || [ -e "$f" ]; then
+                printf 'sidecar.sh: cannot read %s (not a readable regular file); skipped\n' "$f" >&2
+            fi
+            continue
+        fi
+        if ! label="$(jq -r '.solutions.system | strings' "$f" 2>/dev/null)"; then
+            printf 'sidecar.sh: cannot read %s; skipped\n' "$f" >&2
+            continue
+        fi
+        if label_ok "$label"; then printf '%s\t%s\n' "$label" "$d"; fi
+    done
+}
+
+suggest_name() {
+    local r url n name
+    for r in $(pgit remote 2>/dev/null); do
+        url="$(pgit remote get-url "$r" 2>/dev/null)" || continue
+        n="$(norm_remote "$url")"
+        if [ -n "$n" ]; then
+            n="${n#*/}"
+            case "$n" in
+                */*) name="$(basename "$(dirname "$n")")-$(basename "$n")" ;;
+                *)   name="$n" ;;
+            esac
+            break
+        fi
+    done
+    [ -n "${name:-}" ] || name="$(basename "$(main_checkout)")"
+    lower "$name" | tr -c 'a-z0-9._-' '-' | sed 's/^-*//; s/-*$//'
+}
+
+# commit_paths <sidecar> <msg> <relpath>...
+# Pathspec-only, so a concurrent writer's staged file is never swept in; retried
+# because two sessions share one index.lock; "nothing to commit" means another
+# writer already committed this exact content, which is success.
+commit_paths() {
+    local dir="$1" msg="$2" out i
+    shift 2
+    i=0
+    while [ "$i" -lt 20 ]; do
+        i=$((i + 1))
+        if out="$(LC_ALL=C sgit "$dir" add -- "$@" 2>&1)"; then
+            if out="$(LC_ALL=C sgit "$dir" commit -q --only -m "$msg" -- "$@" 2>&1)"; then
+                return 0
+            fi
+            case "$out" in
+                *"nothing to commit"*|*"no changes added to commit"*|*"nothing added to commit"*) return 0 ;;
+            esac
+        fi
+        sleep 0.2
+    done
+    printf 'sidecar.sh: commit failed after 20 attempts: %s\n' "$out" >&2
+    return 1
+}
+
+# Print the resolved sidecar path, or the miss message and return 1.
+do_resolve() {
+    local keys key owners count hit="" missing new_keys tmp k other
+    in_repo || refuse "not inside a git repository"
+    keys="$(current_keys)"
+    # shellcheck disable=SC2086 # split on IFS (newlines), as the loops below do
+    owners_scan $keys
+    for key in $keys; do
+        owners="$(owners_of "$key")" || exit 1
+        [ -n "$owners" ] || continue
+        count="$(printf '%s\n' "$owners" | wc -l | tr -d ' ')"
+        hit="$(printf '%s\n' "$owners" | head -n 1)"
+        if [ "$count" -gt 1 ]; then
+            printf 'ALIAS COLLISION: %s is claimed by %s sidecars: %s — using %s\n' \
+                "$key" "$count" "$(printf '%s' "$owners" | tr '\n' ' ')" "$hit" >&2
+        fi
+        break
+    done
+    if [ -z "$hit" ]; then
+        # Absolute path to this script: a bare `sidecar.sh` is on no one's PATH.
+        self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+        printf 'SIDECAR MISS: run: bash %s init --name %s --mode <owned|guest> --write <sidecar|in-tree|ask> --in-tree-path <path|none>\n' \
+            "$self" "$(suggest_name)" >&2
+        return 1
+    fi
+    new_keys=""
+    for k in $keys; do
+        if ! scan_or_jq_has "$hit" "$k"; then
+            # An unreadable sidecar.json might claim this alias; skip adding it
+            # rather than refuse a resolve that already has its hit.
+            other="$(owners_of "$k")" || continue
+            other="$(printf '%s\n' "$other" | head -n 1)"
+            if [ -n "$other" ]; then
+                printf 'ALIAS COLLISION: %s already belongs to %s; not adding it to %s\n' "$k" "$other" "$hit" >&2
+            else
+                new_keys="$new_keys
+$k"
+            fi
+        fi
+    done
+    scan_clear
+    if [ -n "$new_keys" ]; then
+        new_keys="${new_keys#?}"
+        tmp="$(mktemp "$hit/.sidecar.json.XXXXXX")"
+        # shellcheck disable=SC2086 # word-splitting the key list is the point
+        if jq '.keys += ($ARGS.positional - .keys)' --args $new_keys < "$hit/sidecar.json" > "$tmp"; then
+            mv "$tmp" "$hit/sidecar.json"
+            missing="$(printf '%s' "$new_keys" | tr '\n' ' ')"
+            commit_paths "$hit" "sidecar: add alias $missing" sidecar.json || return 1
+            printf 'sidecar.sh: added alias %s\n' "$missing" >&2
+        else
+            rm -f "$tmp"
+        fi
+    fi
+    printf '%s\n' "$hit"
+}
+
+# One meaning for solutions.in_tree_path in every reader: a leading "./" and a
+# trailing "/" stripped, so docs/solutions/ and ./docs/solutions are
+# docs/solutions. Written by init, applied again on config get and in
+# solutions-dirs so a sidecar written before this existed agrees too.
+norm_in_tree_path() {
+    local itp="$1"
+    while [ "${itp#./}" != "$itp" ] && [ "$itp" != "./" ]; do itp="${itp#./}"; done
+    while [ "${#itp}" -gt 1 ] && [ "${itp%/}" != "$itp" ]; do itp="${itp%/}"; done
+    printf '%s' "$itp"
+}
+
+cmd_init() {
+    local name="" mode="" write="" itp="" keys key owner gname gemail dir storage top forge_kind forge_write migrate=1 aliases=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name)         [ $# -ge 2 ] || die_usage "--name needs a value"; name="$2"; shift 2 ;;
+            --mode)         [ $# -ge 2 ] || die_usage "--mode needs a value"; mode="$2"; shift 2 ;;
+            --write)        [ $# -ge 2 ] || die_usage "--write needs a value"; write="$2"; shift 2 ;;
+            --in-tree-path) [ $# -ge 2 ] || die_usage "--in-tree-path needs a value"; itp="$2"; shift 2 ;;
+            --migrate-archive)    migrate=1; shift ;;
+            --no-migrate-archive) migrate=0; shift ;;
+            --archive-alias)
+                [ $# -ge 2 ] || die_usage "--archive-alias needs a value"
+                alias_ok "$2" || die_usage "init: --archive-alias must be one directory name: $2"
+                aliases="${aliases:+$aliases$'\n'}$(lower "$2")"; shift 2 ;;
+            *) die_usage "init: unknown argument: $1" ;;
+        esac
+    done
+    case "$mode" in owned|guest) ;; *) die_usage "init: --mode must be owned or guest" ;; esac
+    case "$write" in sidecar|in-tree|ask) ;; *) die_usage "init: --write must be sidecar, in-tree, or ask" ;; esac
+    [ -n "$itp" ] || die_usage "init: --in-tree-path is required (a path, or none)"
+    itp="$(norm_in_tree_path "$itp")"
+    if [ "$write" != "sidecar" ] && [ "$itp" = "none" ]; then
+        die_usage "init: --write $write needs an in-tree path, not none"
+    fi
+    in_repo || refuse "not inside a git repository"
+    [ -n "$name" ] || name="$(suggest_name)"
+    case "$name" in
+        ''|.*|*/*|*[!a-z0-9._-]*) die_usage "init: --name must be lowercase letters, digits, '.', '_' or '-': $name" ;;
+    esac
+
+    keys="$(current_keys)"
+    [ -n "$keys" ] || refuse "init: this checkout has no root commit, remote, or path to key on"
+    for key in $keys; do
+        owner="$(owners_of "$key")" || exit 1
+        owner="$(printf '%s\n' "$owner" | head -n 1)"
+        [ -z "$owner" ] || refuse "init refused: $key already belongs to sidecar $(basename "$owner") ($owner)"
+    done
+    dir="$SIDECAR_ROOT/$name"
+    [ ! -e "$dir" ] || refuse "init refused: $dir already exists"
+
+    gname="$(pgit config --global user.name 2>/dev/null || true)"
+    gemail="$(pgit config --global user.email 2>/dev/null || true)"
+    if [ -z "$gname" ] || [ -z "$gemail" ]; then
+        refuse "init refused: set a global git identity first (git config --global user.name / user.email); the sidecar will not inherit a repo-local one"
+    fi
+
+    top="$(pgit rev-parse --show-toplevel)"
+    storage="$(jq -r '.research.storage // "archive"' "$top/.claude/settings.json" 2>/dev/null || echo archive)"
+    case "$storage" in archive|spike-issue) ;; *) storage=archive ;; esac
+
+    forge_kind="$(forge_kind_of "$keys")"
+    forge_write="$(derive_forge_write "$mode" "$forge_kind")"
+
+    mkdir -p "$dir" || refuse "init: cannot create $dir"
+    # $dir did not exist above, so init created it. Any failure from here on
+    # (git init, config, the jq write, the first commit) would leave a
+    # sidecar claiming these keys with no committed sidecar.json, and block
+    # every retry; remove it on any exit until success clears the trap.
+    INIT_CREATED_DIR="$dir"
+    trap 'rm -rf "$INIT_CREATED_DIR"' EXIT
+    sgit "$dir" init -q -b main || refuse "init: git init failed in $dir"
+    sgit "$dir" config user.name "$gname"
+    sgit "$dir" config user.email "$gemail"
+    # shellcheck disable=SC2086 # word-splitting the key list is the point
+    jq -n \
+        --arg name "$name" --arg mode "$mode" --arg write "$write" --arg itp "$itp" \
+        --arg storage "$storage" --arg forge "$forge_kind" --argjson fwrite "$forge_write" \
+        --arg created "$(date +%Y-%m-%d)" \
+        '{
+           schema: 2,
+           name: $name,
+           keys: $ARGS.positional,
+           mode: $mode,
+           solutions: { write: $write, in_tree_path: $itp },
+           research: { storage: $storage },
+           forge: { kind: $forge, write: $fwrite },
+           tracker: { kind: "none", url: "", write: [] },
+           created: $created
+         }' --args $keys > "$dir/sidecar.json" || refuse "init: could not write sidecar.json"
+    commit_paths "$dir" "sidecar: init $name" sidecar.json || exit 1
+    trap - EXIT
+    # After the trap is cleared: a migration failure must not delete a sidecar
+    # that already holds moved archive files.
+    if [ "$migrate" -eq 1 ]; then
+        migrate_archive "$dir" "$keys" "$aliases" || exit 1
+    fi
+    printf '%s\n' "$dir"
+}
+
+# Directory names the old research archive used for this project, lowercased:
+# owner-repo cut from each remote key, and, only when there is no remote key,
+# the main checkout's basename, which /research improvised for repos with no
+# remote. <keys> is the checkout's key list.
+archive_names() {
+    local keys="$1" k n has_remote=0
+    for k in $keys; do case "$k" in remote:*) has_remote=1 ;; esac; done
+    for k in $keys; do
+        case "$k" in
+            remote:*)
+                n="${k#remote:}"
+                n="${n#*/}"
+                case "$n" in
+                    */*) printf '%s-%s\n' "$(basename "$(dirname "$n")")" "$(basename "$n")" ;;
+                    *)   printf '%s\n' "$n" ;;
+                esac
+                ;;
+            path:*) [ "$has_remote" -eq 1 ] || basename "${k#path:}" ;;
+        esac
+    done
+}
+
+# migrate_archive <sidecar> <keys> <aliases>
+# Moves each matching archive directory's files into <sidecar>/research/ and
+# replaces the directory with a symlink to it, so the absolute archive paths
+# embedded in PRD issues still resolve. A directory holding a file whose name
+# exists in research/ with different content is left untouched. Actions are
+# printed on stderr; stdout stays the sidecar path.
+migrate_archive() {
+    local sc="$1" keys="$2" aliases="${3:-}" archive dest names d base e target moved conflict any=0 mbase self tmpl
+    archive="$ARCHIVE_ROOT"
+    mbase="$(lower "$(basename "$(main_checkout)")")"
+    self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+    [ -d "$archive" ] || return 0
+    dest="$sc/research"
+    mkdir -p "$dest" || refuse "archive: cannot create $dest"
+    names="$({ archive_names "$keys"; [ -z "$aliases" ] || printf '%s\n' "$aliases"; } | LC_ALL=C sort -u)"
+    [ -n "$names" ] || return 0
+    for d in "$archive"/*; do
+        [ -d "$d" ] || continue
+        [ -L "$d" ] && continue
+        base="$(lower "$(basename "$d")")"
+        if ! printf '%s\n' "$names" | grep -qxF -- "$base"; then
+            if [ "$base" = "$mbase" ]; then
+                printf 'sidecar.sh: archive: skipped %s: this checkout has a remote, so a folder named for the checkout is not claimed; if it is this project'"'"'s, run: bash %s migrate-archive --archive-alias %s\n' \
+                    "$d" "$self" "$base" >&2
+            fi
+            continue
+        fi
+        conflict=0
+        for e in "$d"/* "$d"/.[!.]* "$d"/..?*; do
+            [ -e "$e" ] || [ -L "$e" ] || continue
+            target="$dest/$(basename "$e")"
+            if [ -e "$target" ] && ! { [ -f "$e" ] && [ -f "$target" ] && cmp -s "$e" "$target"; }; then
+                printf 'sidecar.sh: archive: left %s untouched: %s already exists in %s with different content\n' \
+                    "$d" "$(basename "$e")" "$dest" >&2
+                conflict=1
+                break
+            fi
+        done
+        [ "$conflict" -eq 0 ] || continue
+        moved=0
+        for e in "$d"/* "$d"/.[!.]* "$d"/..?*; do
+            [ -e "$e" ] || [ -L "$e" ] || continue
+            target="$dest/$(basename "$e")"
+            if [ -e "$target" ]; then
+                rm -f "$e"
+            else
+                mv "$e" "$target" || refuse "archive: could not move $e into $dest"
+            fi
+            moved=$((moved + 1))
+        done
+        # The link is made at a temp name first, so a failed ln leaves the old
+        # directory in place; if the final rename fails, the directory is
+        # recreated so the old path is never left missing.
+        tmpl="$d.sidecar-link.$$"
+        ln -s "$dest" "$tmpl" || refuse "archive: could not link $d to $dest"
+        rmdir "$d" || { rm -f "$tmpl"; refuse "archive: $d is not empty after the move; left in place"; }
+        mv -f "$tmpl" "$d" || { rm -f "$tmpl"; mkdir -p "$d"; refuse "archive: could not link $d to $dest"; }
+        printf 'sidecar.sh: archive: moved %s file(s) from %s into %s; %s is now a symlink to it\n' \
+            "$moved" "$d" "$dest" "$d" >&2
+        any=1
+    done
+    if [ "$any" -eq 1 ] && [ -n "$(ls -A "$dest")" ]; then
+        commit_paths "$sc" "sidecar: migrate research archive" research || return 1
+    fi
+    return 0
+}
+
+cmd_config() {
+    local sc
+    case "${1:-}" in
+        get)
+            [ $# -eq 2 ] || die_usage "usage: sidecar.sh config get <dotted.key>"
+            sc="$(do_resolve)" || exit 1
+            if [ "$2" = "solutions.in_tree_path" ]; then
+                local itp
+                itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")" || exit 1
+                [ -z "$itp" ] || { norm_in_tree_path "$itp"; printf '\n'; }
+            else
+                jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
+            fi
+            ;;
+        set)
+            [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>|conventions <json-array>|design <json>>"
+            case "$2" in
+                mode) config_set_mode "$3" ;;
+                base_ref) config_set_base_ref "$3" ;;
+                system) config_set_system "$3" ;;
+                verify.*) config_set_verify "${2#verify.}" "$3" ;;
+                conventions) config_set_conventions "$3" ;;
+                design) config_set_design "$3" ;;
+                *) die_usage "config set: expected mode, base_ref, system, verify.<field>, conventions, or design, got: $2" ;;
+            esac
+            ;;
+        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>|conventions <json-array>|design <json>>>" ;;
+    esac
+}
+
+config_set_mode() {
+    local mode="$1" sc kind fw tmp
+    case "$mode" in owned|guest) ;; *) die_usage "config set: mode must be owned or guest" ;; esac
+    sc="$(do_resolve)" || exit 1
+    kind="$(jq -r '.forge.kind // "none"' "$sc/sidecar.json")"
+    fw="$(derive_forge_write "$mode" "$kind")"
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+    if jq --arg mode "$mode" --argjson fw "$fw" '.mode = $mode | .forge.write = $fw' < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: set mode $mode" sidecar.json || exit 1
+}
+
+config_set_base_ref() {
+    local b="$1" sc tmp
+    [ -n "$b" ] || die_usage "config set: base_ref needs a branch name"
+    case "$b" in origin/*) die_usage "config set: base_ref is the bare branch name (${b#origin/}), not the remote ref $b" ;; esac
+    in_repo || refuse "not inside a git repository"
+    pgit check-ref-format --branch "$b" >/dev/null 2>&1 || die_usage "config set: not a valid branch name: $b"
+    base_ref_of "$b" >/dev/null 2>&1 \
+        || refuse "config set: neither origin/$b nor $b resolves in this checkout; fetch it, or check the name"
+    sc="$(do_resolve)" || exit 1
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+    if jq --arg b "$b" '.base_ref = $b' < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: set base_ref $b" sidecar.json || exit 1
+}
+
+config_set_system() {
+    local label="$1" sc tmp filter line others=""
+    # shellcheck disable=SC2016 # $l is a jq variable
+    filter='.solutions.system = $l'
+    if [ -z "$label" ]; then
+        filter='del(.solutions.system)'
+    elif ! label_ok "$label"; then
+        die_usage "config set: system must be lowercase letters, digits, '.', '_' or '-': $label"
+    fi
+    sc="$(do_resolve)" || exit 1
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+    if jq --arg l "$label" "$filter" < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: set system ${label:-none}" sidecar.json || exit 1
+    [ -n "$label" ] || return 0
+    for line in $(system_labels); do
+        [ "${line#*$'\t'}" != "$sc" ] || continue
+        [ "${line%%$'\t'*}" != "$label" ] || return 0
+        others="${others:+$others$'\n'}${line%%$'\t'*}"
+    done
+    others="$(printf '%s\n' "$others" | LC_ALL=C sort -u | sed '/^$/d' | paste -sd, - | sed 's/,/, /g')"
+    printf 'sidecar.sh: no other sidecar carries system label %s yet (labels in use: %s); check the spelling, because a mistyped label is a group of one\n' "$label" "${others:-none}" >&2
+}
+
+# The verify command fields, in the order profile prints them. config set
+# accepts exactly these plus hazards, and VERIFY_FIELDS is derived from this
+# list, so a field added here is both writable and rendered.
+VERIFY_FIELD_NAMES=(typecheck test lint package_manager hook_manager runtime_check test_changed)
+VERIFY_FIELDS="[$(printf '"%s",' "${VERIFY_FIELD_NAMES[@]}")"
+VERIFY_FIELDS="${VERIFY_FIELDS%,}]"
+
+ONE_LINE_JQ='def one_line: type == "string" and (test("[\n\r]") | not);'
+
+# jq: the hazard list's errors, one per line; empty when every entry is valid.
+# shellcheck disable=SC2016 # $h is a jq variable
+HAZARDS_JQ="$ONE_LINE_JQ"'
+  if type != "array" then "hazards must be a JSON array"
+  else to_entries[] | .key as $i | .value as $h
+    | if ($h | type) != "object" then "hazard \($i) is not an object"
+      elif ($h | has("reason") | not) then "hazard \($i) has no reason"
+      elif ($h.reason | one_line | not) or ($h.reason | test("^\\s*$")) then "hazard \($i) needs a non-empty one-line reason"
+      elif ($h | has("command")) and (($h.command | one_line | not) or ($h.command | test("^\\s*$"))) then "hazard \($i) command must be a non-empty one-line string"
+      elif ($h | keys - ["reason", "command"] | length) > 0 then "hazard \($i) has keys other than reason and command: \($h | keys - ["reason", "command"] | join(", "))"
+      else empty end
+  end'
+
+# The convention lines a brief can carry before config set warns.
+CONVENTIONS_WARN_LINES=15
+
+# jq: the conventions list's errors, one per line; empty when every line is valid.
+CONVENTIONS_JQ="$ONE_LINE_JQ"'
+  if type != "array" then "conventions must be a JSON array of strings"
+  else to_entries[]
+    | if (.value | one_line | not) or (.value | test("^\\s*$")) then "convention \(.key) needs non-empty one-line text"
+      else empty end
+  end'
+
+# jq: the design pointer's error; empty when it is valid.
+DESIGN_JQ="$ONE_LINE_JQ"'
+  def text: one_line and test("\\S");
+  if type != "object" then "design must be a JSON object with a ref"
+  elif has("ref") | not then "design has no ref"
+  elif .ref | text | not then "design ref must be non-empty one-line text"
+  elif has("note") and (.note | text | not) then "design note must be non-empty one-line text"
+  elif (keys - ["ref", "note"] | length) > 0 then "design has keys other than ref and note: \(keys - ["ref", "note"] | join(", "))"
+  else empty end'
+
+# jq: move a schema-1 sidecar to schema 2, dropping init's "" stubs.
+SCHEMA2_JQ='(if (.schema // 1) < 2 then
+    (if (.verify | type) == "object" then .verify |= with_entries(select(.value != "")) else . end)
+    | .schema = 2
+  else . end)'
+
+config_set_verify() {
+    local f="$1" v="$2" sc tmp errs val known n
+    case "$f" in
+        hazards)
+            val="$(printf '%s' "$v" | jq -c . 2>/dev/null)" || refuse "config set: verify.hazards is not valid JSON"
+            errs="$(printf '%s' "$val" | jq -r "$HAZARDS_JQ")" || refuse "config set: could not check verify.hazards"
+            [ -z "$errs" ] || refuse "config set: verify.hazards refused, nothing written: ${errs//$'\n'/; }" ;;
+        *)
+            known=0
+            for n in "${VERIFY_FIELD_NAMES[@]}"; do [ "$f" != "$n" ] || known=1; done
+            [ "$known" -eq 1 ] || die_usage "config set: verify field must be one of $(printf '%s ' "${VERIFY_FIELD_NAMES[@]}")hazards, got: $f"
+            case "$v" in *$'\n'*|*$'\r'*) refuse "config set: verify.$f must be one line" ;; esac
+            # "" declares none; a value of only blanks is neither a command nor none.
+            [ -z "$v" ] || [ -n "${v//[[:space:]]/}" ] || refuse "config set: verify.$f is blank; pass \"\" to declare none"
+            val="$(jq -n --arg v "$v" '$v')" ;;
+    esac
+    sc="$(do_resolve)" || exit 1
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+    # shellcheck disable=SC2016 # $f and $v are jq variables
+    if jq --arg f "$f" --argjson v "$val" "$SCHEMA2_JQ"'
+        | .verify = ((if (.verify | type) == "object" then .verify else {} end) + {($f): $v})' \
+        < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: set verify.$f" sidecar.json || exit 1
+}
+
+# config_parse_json <key> <raw>: the single JSON value in raw, compact.
+config_parse_json() {
+    command -v jq >/dev/null 2>&1 || refuse "config set: jq is required and is not on PATH"
+    printf '%s' "$2" | jq -cs 'if length == 1 then .[0] else error("not one value") end' 2>/dev/null \
+        || refuse "config set: $1 is not one valid JSON value"
+}
+
+# config_set_top_key <key> <json>: write one validated top-level key and commit it.
+config_set_top_key() {
+    local k="$1" val="$2" sc tmp
+    sc="$(do_resolve)" || exit 1
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+    # shellcheck disable=SC2016 # $k and $v are jq variables
+    if jq --arg k "$k" --argjson v "$val" "$SCHEMA2_JQ"' | .[$k] = $v' < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: set $k" sidecar.json || exit 1
+}
+
+config_set_conventions() {
+    local val errs n
+    val="$(config_parse_json conventions "$1")" || exit 1
+    errs="$(printf '%s' "$val" | jq -r "$CONVENTIONS_JQ")" || refuse "config set: could not check conventions"
+    [ -z "$errs" ] || refuse "config set: conventions refused, nothing written: ${errs//$'\n'/; }"
+    config_set_top_key conventions "$val"
+    n="$(printf '%s' "$val" | jq length)"
+    if [ "$n" -gt "$CONVENTIONS_WARN_LINES" ]; then
+        printf 'sidecar.sh: conventions has %s lines, past %s; it is written, and every sub-agent brief pastes all of it, so cut what the host repo already states\n' "$n" "$CONVENTIONS_WARN_LINES" >&2
+    fi
+}
+
+config_set_design() {
+    local val='{}' errs
+    if [ -n "$1" ]; then
+        val="$(config_parse_json design "$1")" || exit 1
+        errs="$(printf '%s' "$val" | jq -r "$DESIGN_JQ")" || refuse "config set: could not check design"
+        [ -z "$errs" ] || refuse "config set: design refused, nothing written: $errs"
+    fi
+    config_set_top_key design "$val"
+}
+
+# The repo-facts block; the outcomes are in the header.
+# shellcheck disable=SC2016 # $s, $v, $f are jq variables
+PROFILE_JQ="$ONE_LINE_JQ"'
+  if type != "object" then error("not an object") else . end
+  | (.schema // 1) as $s
+  | if ($s | type) != "number" then error("schema is not a number") else . end
+  | (.verify // {}) as $v
+  | if ($v | type) != "object" then error("verify is not an object") else . end
+  | [$fields[] as $f
+      | if ($v | has($f) | not) then {f: $f, st: "unasked"}
+        elif ($v[$f] | one_line | not) then error("verify.\($f) is not a one-line string")
+        elif $v[$f] == "" then {f: $f, st: (if $s < 2 then "unasked" else "none" end)}
+        elif $v[$f] | test("^\\s*$") then error("verify.\($f) is blank")
+        else {f: $f, st: "cmd", c: $v[$f]} end] as $rows
+  | (if ($v | has("hazards") | not) then null
+     else ([$v.hazards | '"$HAZARDS_JQ"'] | if length > 0 then error(join("; ")) else $v.hazards end) end) as $hz
+  | (if has("conventions") | not then null
+     else . as $root | ([.conventions | '"$CONVENTIONS_JQ"'] | if length > 0 then error(join("; ")) else $root.conventions end) end) as $cv
+  | ([$rows[] | select(.st != "unasked")] | if length > 0 then
+        "Verify:", (.[] | "  \(.f): \(if .st == "none" then "none" else .c end)") else empty end),
+    (if $hz == null then empty
+     elif ($hz | length) == 0 then "Hazards (do not run; ask first): none"
+     else "Hazards (do not run; ask first):", ($hz[] | "  - " + (if has("command") then .command + ": " else "" end) + .reason) end),
+    (if $cv == null then empty
+     elif ($cv | length) == 0 then "Conventions: none"
+     else "Conventions:", ($cv[] | "  - " + .) end),
+    ([($rows[] | select(.st == "unasked" and .f != "test_changed") | .f), (if $hz == null then "hazards" else empty end),
+      (if $cv == null then "conventions" else empty end)]
+     | if length > 0 then "Not declared (ask before running anything not listed): " + join(", ") else empty end)'
+
+cmd_profile() {
+    local base sc errf body src
+    [ $# -eq 0 ] || die_usage "usage: sidecar.sh profile"
+    in_repo || refuse "not inside a git repository"
+    command -v jq >/dev/null 2>&1 || refuse "profile: jq is required to read the sidecar and is not on PATH; printing no profile"
+    base="$(cmd_base_ref)" || refuse "profile: no base ref (above); printing no profile"
+    errf="$(mktemp)" || refuse "profile: cannot create a temp file"
+    if sc="$(do_resolve 2>"$errf")"; then
+        cat "$errf" >&2; rm -f "$errf"
+        src="$sc/sidecar.json"
+    elif grep -q 'SIDECAR MISS:' "$errf"; then
+        rm -f "$errf"
+        src=/dev/null
+    else
+        cat "$errf" >&2; rm -f "$errf"; exit 1
+    fi
+    if [ "$src" = /dev/null ]; then
+        body="$(jq -nr --argjson fields "$VERIFY_FIELDS" '{} | '"$PROFILE_JQ" 2>&1)"
+    else
+        body="$(jq -r --argjson fields "$VERIFY_FIELDS" "$PROFILE_JQ" "$src" 2>&1)"
+    fi || refuse "profile: cannot read the repo facts from $src: $body"
+    printf "## Repo profile (from the operator's sidecar; follow it)\nBase ref: %s\n%s\n" "$base" "$body"
+}
+
+# base_ref_of <name>: the range-endpoint ref for a base branch name, per the
+# header; returns 1, printing nothing, when neither form resolves.
+# Only a remote-tracking or local branch counts: a tag, or a revision expression
+# such as @{-1}, develop~1 or HEAD, is not a base: the name must be a valid
+# branch name, which no revision expression is, and HEAD is refused by name.
+base_ref_of() {
+    [ "$1" != HEAD ] || return 1
+    pgit check-ref-format "refs/heads/$1" >/dev/null 2>&1 || return 1
+    if pgit rev-parse --verify -q "refs/remotes/origin/$1" >/dev/null 2>&1; then
+        printf 'origin/%s\n' "$1"
+    elif pgit rev-parse --verify -q "refs/heads/$1" >/dev/null 2>&1; then
+        printf 'note: origin/%s does not resolve — measuring against the local branch, which may be stale\n' "$1" >&2
+        printf '%s\n' "$1"
+    else
+        return 1
+    fi
+}
+
+# pr_base_name: the base of the current branch's open PR, or nothing. The
+# conditions under which gh is asked at all are in the header.
+pr_base_name() {
+    local name
+    command -v gh >/dev/null 2>&1 || return 0
+    [ "$(forge_kind_of "$(current_keys 2>/dev/null)")" = github ] || return 0
+    [ "$(cmd_backend stamp 2>/dev/null)" = github ] || return 0
+    name="$(GH_PROMPT_DISABLED=1 gh pr view --json baseRefName,state -q 'select(.state == "OPEN") | .baseRefName' </dev/null 2>/dev/null)" || return 0
+    printf '%s\n' "$name" | head -n 1
+}
+
+# The base branch; the three outcomes are in the header.
+cmd_base_ref() {
+    local want=ref pr=yes sc errf v name="" candidate ref
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) want=name ;;
+            --no-pr) pr=no ;;
+            *) die_usage "usage: sidecar.sh base-ref [--name] [--no-pr]" ;;
+        esac
+        shift
+    done
+    in_repo || refuse "not inside a git repository"
+    command -v jq >/dev/null 2>&1 || refuse "base-ref: jq is required to read the sidecar and is not on PATH; refusing rather than answering the origin/HEAD default"
+    [ "$pr" = no ] || name="$(pr_base_name)"
+    if [ -n "$name" ]; then
+        ref="$(base_ref_of "$name")" \
+            || refuse "base-ref: this branch's open PR targets $name, and neither origin/$name nor $name resolves; run git fetch origin $name"
+        if [ "$want" = name ]; then printf '%s\n' "$name"; else printf '%s\n' "$ref"; fi
+        return 0
+    fi
+    errf="$(mktemp)" || refuse "base-ref: cannot create a temp file"
+    if sc="$(do_resolve 2>"$errf")"; then
+        cat "$errf" >&2; rm -f "$errf"
+        v="$(jq -r 'if type != "object" then error("not an object")
+                    elif has("base_ref") | not then "absent"
+                    elif (.base_ref | type) != "string" then error("base_ref is not a string")
+                    else "declared:" + .base_ref end' "$sc/sidecar.json" 2>&1)" \
+            || refuse "base-ref: cannot read base_ref from $sc/sidecar.json: $v"
+        if [ "$v" != absent ]; then
+            name="${v#declared:}"
+            [ -n "$name" ] || refuse "base-ref: base_ref in $sc/sidecar.json is empty; set it with: sidecar.sh config set base_ref <branch>"
+            ref="$(base_ref_of "$name")" \
+                || refuse "base-ref: base_ref is $name in $sc/sidecar.json, and neither origin/$name nor $name resolves"
+            if [ "$want" = name ]; then printf '%s\n' "$name"; else printf '%s\n' "$ref"; fi
+            return 0
+        fi
+    elif grep -q 'SIDECAR MISS:' "$errf"; then
+        rm -f "$errf"
+    else
+        cat "$errf" >&2; rm -f "$errf"; exit 1
+    fi
+    name="$(pgit symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')"
+    if [ -z "$name" ]; then
+        for candidate in main master prod develop trunk; do
+            if pgit rev-parse --verify -q "$candidate" >/dev/null 2>&1; then name=$candidate; break; fi
+        done
+    fi
+    [ -n "$name" ] || refuse "base-ref: no base branch found: origin/HEAD is unset and none of main master prod develop trunk resolves; declare one with: sidecar.sh config set base_ref <branch>"
+    if [ "$want" = name ]; then
+        printf '%s\n' "$name"
+    elif ! base_ref_of "$name"; then
+        # origin/HEAD named a branch that no longer resolves either way.
+        refuse "base-ref: origin/HEAD names $name, and neither origin/$name nor $name resolves; run git remote set-head origin --auto"
+    fi
+}
+
+# The slice's review range; the outcomes are in the header.
+cmd_range() {
+    local id="" base sc errf f start rc fork merges why
+    case "$#" in
+        0) ;;
+        1) id="$1"; is_work_id "$id" || die_usage "range: expected an id like W-3, got: $id" ;;
+        *) die_usage "usage: sidecar.sh range [<W-n>]" ;;
+    esac
+    base="$(cmd_base_ref)" || exit 1
+    [ -n "$id" ] || { printf '%s..HEAD\n' "$base"; return 0; }
+    errf="$(mktemp)" || refuse "range: cannot create a temp file"
+    if ! sc="$(do_resolve 2>"$errf")"; then
+        if grep -q 'SIDECAR MISS:' "$errf"; then
+            rm -f "$errf"; printf '%s..HEAD\n' "$base"; return 0
+        fi
+        cat "$errf" >&2; rm -f "$errf"; exit 1
+    fi
+    rm -f "$errf"
+    f="$sc/work/$id.md"
+    if [ ! -f "$f" ]; then
+        case "$(cmd_backend slices 2>/dev/null)" in
+            github) printf '%s..HEAD\n' "$base"; return 0 ;;
+            *) refuse "range: no such work item: $id" ;;
+        esac
+    fi
+    start="$(work_jq -Rsr "$WORK_JQ parse_work | .fm.start_sha // empty" "$f")" \
+        || refuse "range: $f does not parse"
+    [ -n "$start" ] || { printf '%s..HEAD\n' "$base"; return 0; }
+    printf '%s' "$start" | grep -qxE '[0-9a-f]{40}' || refuse "range: start_sha in $id is not 40 lowercase hex: $start"
+    rc=0
+    if pgit cat-file -e "$start^{commit}" 2>/dev/null; then
+        pgit merge-base --is-ancestor "$start" HEAD 2>/dev/null || rc=$?
+    else
+        rc=1
+    fi
+    case "$rc" in
+        0|1) ;;
+        *) refuse "range: git merge-base --is-ancestor $start HEAD exited $rc" ;;
+    esac
+    why="is no longer on this branch (a fold or rebase rewrote it)"
+    if [ "$rc" = 0 ]; then
+        # Ancestry is not containment: a rebase onto an advanced base, or a merge
+        # from it, leaves the start an ancestor while the range fills with the
+        # base's own commits. Use the start only when it holds the fork point and
+        # no merge follows it.
+        rc=0
+        fork="$(pgit merge-base "$base" HEAD 2>/dev/null)" || rc=$?
+        case "$rc" in
+            0) if ! pgit merge-base --is-ancestor "$fork" "$start" 2>/dev/null; then
+                   rc=1
+               else
+                   merges="$(pgit log --merges --format=%H "$start..HEAD")" \
+                       || refuse "range: git log --merges $start..HEAD failed"
+                   [ -z "$merges" ] || rc=1
+               fi ;;
+            1) rc=1 ;;
+            *) refuse "range: git merge-base $base HEAD exited $rc" ;;
+        esac
+        [ "$rc" = 0 ] || why="no longer bounds only this branch's commits (the base moved under it: a rebase onto, or a merge from, $base)"
+    fi
+    if [ "$rc" = 0 ]; then
+        printf '%s..HEAD\n' "$start"
+    else
+        printf 'sidecar.sh: range: %s started at %s, which %s; reviewing from %s instead\n' \
+            "$id" "${start:0:12}" "$why" "$base" >&2
+        printf '%s..HEAD\n' "$base"
+    fi
+}
+
+cmd_migrate_archive() {
+    local aliases="" sc keys
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --archive-alias)
+                [ $# -ge 2 ] || die_usage "--archive-alias needs a value"
+                alias_ok "$2" || die_usage "migrate-archive: --archive-alias must be one directory name: $2"
+                aliases="${aliases:+$aliases$'\n'}$(lower "$2")"; shift 2 ;;
+            *) die_usage "migrate-archive: unknown argument: $1" ;;
+        esac
+    done
+    sc="$(do_resolve)" || exit 1
+    keys="$(current_keys)"
+    migrate_archive "$sc" "$keys" "$aliases" || exit 1
+}
+
+# The directories a reader searches for lessons; the policy is in the header.
+cmd_solutions_dirs() {
+    local sc="" err itp seen=""
+    [ $# -eq 0 ] || die_usage "usage: sidecar.sh solutions-dirs"
+    err="$(mktemp)" || refuse "solutions-dirs: cannot create a temp file"
+    if sc="$(do_resolve 2>"$err")"; then
+        cat "$err" >&2
+        mkdir -p "$sc/solutions" || { rm -f "$err"; refuse "solutions-dirs: cannot create $sc/solutions"; }
+        itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")" \
+            || { rm -f "$err"; refuse "solutions-dirs: cannot read solutions.in_tree_path from $sc/sidecar.json"; }
+        printf '%s\n' "$sc/solutions"
+        # Normalized before the dedupe below: docs/solutions/ and
+        # ./docs/solutions name the same directory as docs/solutions.
+        itp="$(norm_in_tree_path "$itp")"
+        case "$itp" in ''|none) ;; *) printf '%s\n' "$itp"; seen="$itp" ;; esac
+    else
+        sc=""
+        grep -q 'SIDECAR MISS:' "$err" || cat "$err" >&2
+    fi
+    rm -f "$err"
+    # A /excavate PR commits to docs/solutions whatever in_tree_path says, so an
+    # existing docs/solutions is read even when in_tree_path is none; with no
+    # sidecar it is the default store and is named whether or not it exists.
+    if [ "$seen" != "docs/solutions" ]; then
+        if [ -d docs/solutions ] || [ -z "$sc" ]; then printf 'docs/solutions\n'; fi
+    fi
+}
+
+cmd_related_solutions_dirs() {
+    local sc="" err own rel key hit rc line hits="" seen=""
+    [ $# -eq 0 ] || die_usage "usage: sidecar.sh related-solutions-dirs"
+    err="$(mktemp)" || refuse "related-solutions-dirs: cannot create a temp file"
+    if ! sc="$(do_resolve 2>"$err")"; then
+        grep -q 'SIDECAR MISS:' "$err" || cat "$err" >&2
+        rm -f "$err"
+        return 0
+    fi
+    cat "$err" >&2
+    rm -f "$err"
+    rel="$(jq -er '(.solutions.related // []) | if type == "array" then .[] | strings else error("not an array") end' "$sc/sidecar.json" 2>/dev/null)"
+    rc=$?
+    # -e exits 4 when the list is empty, which is not an error.
+    case "$rc" in 0|4) ;; *) refuse "related-solutions-dirs: solutions.related in $sc/sidecar.json is not an array of keys" ;; esac
+    own="$(jq -r '(.solutions.system // "") | if type == "string" then . else error("not a string") end' "$sc/sidecar.json" 2>/dev/null)" \
+        || refuse "related-solutions-dirs: solutions.system in $sc/sidecar.json is not a label"
+    if [ -n "$own" ]; then
+        label_ok "$own" || refuse "related-solutions-dirs: solutions.system in $sc/sidecar.json is not a label: $own"
+        for line in $(system_labels); do
+            [ "${line%%$'\t'*}" = "$own" ] || continue
+            hits="${hits:+$hits$'\n'}${line#*$'\t'}"
+        done
+    fi
+    for key in $rel; do
+        [ -n "$key" ] || continue
+        rc=0
+        hit="$(owners_of "$key")" || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            printf 'sidecar.sh: cannot look up related key %s; skipped\n' "$key" >&2
+            continue
+        fi
+        hit="$(printf '%s\n' "$hit" | head -n 1)"
+        if [ -z "$hit" ]; then
+            printf 'sidecar.sh: related key %s matches no sidecar; skipped\n' "$key" >&2
+            continue
+        fi
+        hits="${hits:+$hits$'\n'}$hit"
+    done
+    for hit in $hits; do
+        [ "$hit" != "$sc" ] || continue
+        [ -d "$hit/solutions" ] || continue
+        case $'\n'"$seen"$'\n' in *$'\n'"$hit"$'\n'*) continue ;; esac
+        seen="${seen:+$seen$'\n'}$hit"
+        printf '%s\n' "$hit/solutions"
+    done
+    return 0
+}
+
+cmd_relate() {
+    local target sc other key tmp k o
+    [ $# -eq 1 ] || die_usage "usage: sidecar.sh relate <path-to-other-checkout>"
+    target="$1"
+    [ -d "$target" ] || refuse "relate: $target is not a directory"
+    (cd "$target" && in_repo) || refuse "relate: $target is not inside a git repository"
+    sc="$(do_resolve)" || exit 1
+    other=""
+    for k in $(cd "$target" && current_keys 2>/dev/null); do
+        o="$(owners_of "$k")" || refuse "relate: cannot look up $target's sidecar"
+        if [ -n "$o" ]; then other="$(printf '%s\n' "$o" | head -n 1)"; break; fi
+    done
+    [ -n "$other" ] || refuse "relate: no sidecar claims $target; run sidecar.sh init there first"
+    [ "$other" != "$sc" ] || refuse "relate: $target is this project"
+    key="$(jq -r '([.keys[]? | strings | select(startswith("root:"))][0]) // ([.keys[]? | strings][0]) // empty' "$other/sidecar.json")"
+    [ -n "$key" ] || refuse "relate: $other/sidecar.json carries no key"
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "relate: cannot write in $sc"
+    if jq --arg k "$key" '.solutions.related = (((.solutions.related // []) - [$k]) + [$k])' < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "relate: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: relate $(basename "$other")" sidecar.json || exit 1
+    printf '%s\n' "$key"
+}
+
+cmd_path() {
+    local sc
+    [ $# -eq 1 ] || die_usage "usage: sidecar.sh path <research|solutions|review-responses|handoffs>"
+    case "$1" in research|solutions|review-responses|handoffs) ;; *) die_usage "path: expected research, solutions, review-responses, or handoffs, got: $1" ;; esac
+    sc="$(do_resolve)" || exit 1
+    mkdir -p "$sc/$1" || refuse "path: cannot create $sc/$1"
+    printf '%s\n' "$sc/$1"
+}
+
+# The pre-sidecar archive directory for this checkout, keyed by the same name
+# the SIDECAR MISS line suggests. Prints it whether or not a sidecar resolves,
+# and does not create it.
+cmd_archive_dir() {
+    local name
+    [ $# -eq 0 ] || die_usage "usage: sidecar.sh archive-dir"
+    in_repo || refuse "not inside a git repository"
+    name="$(suggest_name)"
+    case "$name" in ''|.*|*/*|*[!a-z0-9._-]*) refuse "archive-dir: no usable name for this checkout: [$name]" ;; esac
+    printf '%s/%s\n' "$ARCHIVE_ROOT" "$name"
+}
+
+cmd_commit() {
+    local msg="" have_msg=0 sc real p d rel
+    local paths=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -m) [ $# -ge 2 ] || die_usage "commit: -m needs a message"; msg="$2"; have_msg=1; shift 2 ;;
+            --) shift ;;
+            *)  paths+=("$1"); shift ;;
+        esac
+    done
+    if ! { [ "$have_msg" -eq 1 ] && [ -n "$msg" ]; }; then die_usage "usage: sidecar.sh commit -- <path>... -m <msg>"; fi
+    [ "${#paths[@]}" -gt 0 ] || die_usage "usage: sidecar.sh commit -- <path>... -m <msg>"
+    sc="$(do_resolve)" || exit 1
+    real="$(cd "$sc" && pwd -P)"
+    local rels=()
+    for p in "${paths[@]}"; do
+        case "$p" in
+            /*)
+                d="$(cd "$(dirname "$p")" 2>/dev/null && pwd -P)" || refuse "commit: no such directory: $(dirname "$p")"
+                rel="$d/$(basename "$p")"
+                case "$rel" in
+                    "$real"/*) rel="${rel#"$real"/}" ;;
+                    *) refuse "commit refused: $p is outside the sidecar ($sc)" ;;
+                esac
+                ;;
+            *) rel="$p" ;;
+        esac
+        [ -e "$real/$rel" ] || refuse "commit: no such file in the sidecar: $rel"
+        rels+=("$rel")
+    done
+    commit_paths "$real" "$msg" "${rels[@]}" || exit 1
+}
+
+cmd_require() {
+    local path="" from=""
+    [ $# -ge 1 ] || die_usage "usage: sidecar.sh require <path> --from <referrer>"
+    path="$1"; shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --from) [ $# -ge 2 ] || die_usage "require: --from needs a value"; from="$2"; shift 2 ;;
+            *) die_usage "require: unknown argument: $1" ;;
+        esac
+    done
+    if ! { [ -n "$path" ] && [ -n "$from" ]; }; then die_usage "usage: sidecar.sh require <path> --from <referrer>"; fi
+    local hit
+    if ! hit="$(resolve_cited "$path" "$from")"; then
+        printf 'MISSING: %s (referenced by %s)\n' "$path" "$from" >&2
+        exit 1
+    fi
+    printf '%s\n' "$hit"
+}
+
+# cited_probe <path>: step 1 of the header's "require resolution order", the
+# path as given with "~/" expanded and a #anchor or :line suffix stripped when
+# the path does not exist with it.
+cited_probe() {
+    # A quoted "~/..." reaches us unexpanded (older PRDs record research paths this way).
+    local probe="$1"
+    # shellcheck disable=SC2088  # the literal ~ is the point
+    case "$probe" in "~/"*) probe="$HOME/${probe#"~/"}" ;; esac
+    # A link may carry a section anchor (name.md#section); look up the file.
+    case "$probe" in *"#"*) [ -e "$probe" ] || probe="${probe%%#*}" ;; esac
+    strip_line_anchor "$probe"
+}
+
+# strip_line_anchor <path>: the path without a line suffix (path:12, :12-20,
+# :12+, :12, 30-31), so an anchor looks up its file. Only a suffix that is all
+# line numbers is stripped, and only when the path does not exist with it, so
+# a real name holding a colon is still found as named. require (through
+# cited_probe), lessons match and lessons flag --for share it.
+strip_line_anchor() {
+    local p="$1"
+    if [ ! -e "$p" ] && [[ "$p" =~ ^(.+):([0-9]+(-[0-9]+|\+)?(,[[:space:]]*[0-9]+(-[0-9]+|\+)?)*)$ ]]; then
+        p="${BASH_REMATCH[1]}"
+    fi
+    printf '%s\n' "$p"
+}
+
+# resolve_cited <path> <referrer>: require's lookup, shared with trace. Prints
+# the physical path of the first candidate that exists, or returns 1; the order
+# is the header's "require resolution order", and the duplicate-category
+# warning goes to stderr here so both callers print it.
+resolve_cited() {
+    local path="$1" from="$2" probe raw c
+    probe="$(cited_probe "$path")"
+    # The path as written (with "~/" expanded), tried before the stripped form at
+    # every step: a real file named "log:12" beside the referrer must beat "log".
+    raw="$path"
+    # shellcheck disable=SC2088  # the literal ~ is the point
+    case "$raw" in "~/"*) raw="$HOME/${raw#"~/"}" ;; esac
+    # A relative link inside a lesson is relative to the lesson's own folder, so when
+    # --from names an existing file, also try the path beside it.
+    if [ ! -e "$probe" ] && [ ! -e "$raw" ] && [ -f "$from" ]; then
+        for c in "$raw" "$probe"; do
+            case "$c" in /*) ;; *) [ -e "$(dirname "$from")/$c" ] && { probe="$(dirname "$from")/$c"; break; } ;; esac
+        done
+    fi
+    # A bare name may also live in a sibling category folder (<store>/<category>/<name>.md),
+    # so look one level up and across, never deeper. The name as written is tried
+    # before the stripped one.
+    if [ ! -e "$probe" ] && [ -f "$from" ]; then
+        for c in "$raw" "$probe"; do
+            case "$c" in
+                /*|*/*) ;;
+                *) local cand first="" hits=""
+                   for cand in "$(dirname "$(dirname "$from")")"/*/"$c"; do
+                       [ -e "$cand" ] || continue
+                       [ -n "$first" ] || first="$cand"
+                       hits="${hits:+$hits }$cand"
+                   done
+                   if [ -n "$first" ]; then
+                       [ "$hits" = "$first" ] || printf 'sidecar.sh: warning: %s is in more than one category folder: %s; using %s\n' "$c" "$hits" "$first" >&2
+                       probe="$first"
+                       break
+                   fi ;;
+            esac
+        done
+    fi
+    [ -e "$probe" ] || return 1
+    # A hit may be beside the referrer or in a sibling category, not where the
+    # caller would guess, so print where it was found and let the caller open that.
+    printf '%s/%s\n' "$(cd "$(dirname "$probe")" && pwd -P)" "$(basename "$probe")"
+}
+
+cmd_backend() {
+    local sc errf item kind
+    [ $# -eq 1 ] || die_usage "usage: sidecar.sh backend <prds|slices|stamp>"
+    case "$1" in
+        prds|slices) item="issues" ;;
+        stamp)       item="prs" ;;
+        *) die_usage "backend: expected prds, slices, or stamp, got: $1" ;;
+    esac
+    # Without jq no sidecar.json can be matched, so a guest's sidecar would read
+    # as SIDECAR MISS and the answer would be `github`: pack text in a client's
+    # PR body. "Could not look" must not share "no sidecar"'s answer.
+    command -v jq >/dev/null 2>&1 || refuse "backend: jq is required to read the sidecar and is not on PATH; refusing rather than answering github"
+    errf="$(mktemp)" || refuse "backend: cannot create a temp file"
+    if ! sc="$(do_resolve 2>"$errf")"; then
+        if grep -q 'SIDECAR MISS:' "$errf"; then
+            rm -f "$errf"; printf 'github\n'; return 0
+        fi
+        cat "$errf" >&2; rm -f "$errf"; exit 1
+    fi
+    cat "$errf" >&2; rm -f "$errf"
+    kind="$(jq -r '.forge.kind // "none"' "$sc/sidecar.json")" || refuse "backend: cannot read $sc/sidecar.json"
+    if ! jq -e '(.forge.write // []) | type == "array"' "$sc/sidecar.json" >/dev/null 2>&1; then
+        refuse "backend: forge.write in $sc/sidecar.json is not an array"
+    fi
+    if [ "$kind" = "github" ] \
+        && jq -e --arg i "$item" '(.forge.write // []) | index($i) != null' "$sc/sidecar.json" >/dev/null; then
+        printf 'github\n'
+    else
+        printf 'sidecar\n'
+    fi
+}
+
+# branch_slug <branch>: the reversible file name for a branch; the rule is in the header.
+branch_slug() {
+    local h out=""
+    for h in $(printf '%s' "$1" | od -An -v -tx1 | tr ' ' '\n'); do
+        [ -n "$h" ] || continue
+        case "$h" in
+            2d|2e|3[0-9]|5f|6[1-9a-f]|7[0-9a]) out="$out$(printf '%b' "\\x$h")" ;;
+            *) out="$out%$(printf '%s' "$h" | tr 'a-f' 'A-F')" ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+
+# stamp_recorded <file> <branch>: the sidecar stamp's SHA, or nothing for a
+# stamp that is absent or cannot be trusted.
+stamp_recorded() {
+    local sha
+    [ -f "$1" ] || return 0
+    sha="$(jq -r --arg b "$2" 'select(.branch == $b) | .reviewed_sha // empty' "$1" 2>/dev/null)" || {
+        printf 'sidecar.sh: stamp read: %s does not parse; treating it as no stamp\n' "$1" >&2; return 0; }
+    printf '%s' "$sha" | grep -qxE '[0-9a-f]{40}' && printf '%s\n' "$sha"
+    return 0
+}
+
+# The directory whose .claude/ the classification hook reads, named the way
+# /pre-merge's stamp and every cleanup of these flags name it. An inherited
+# $CLAUDE_PROJECT_DIR that names another checkout is not handled here: a rule
+# for it has to change the stamp, the cleanups and the hook in the same change.
+lock_project() {
+    if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+        printf '%s\n' "$CLAUDE_PROJECT_DIR"
+    else
+        pgit rev-parse --show-toplevel
+    fi
+}
+
+# stamp_released <branch> [reason]: the head the branch's lock was released
+# at, or with "reason" the reason it was released for, or nothing. On the
+# sidecar backend both come from the committed record, which outlives the
+# cleanups that remove .claude/.post-review-edit before /pre-merge reads it.
+stamp_released() {
+    local backend sc proj f key="${2:-head}" val=""
+    backend="$(cmd_backend stamp)" || exit 1
+    if [ "$backend" = sidecar ]; then
+        sc="$(do_resolve)" || exit 1
+        f="$sc/reviews/released/$(branch_slug "$1").json"
+        [ -f "$f" ] || return 0
+        val="$(jq -r --arg b "$1" --arg k "$key" 'select(.branch == $b) | .[$k] // empty' "$f" 2>/dev/null)" || return 0
+    else
+        proj="$(lock_project)" || refuse "stamp released: cannot find the project directory"
+        f="$proj/.claude/.post-review-edit"
+        [ -f "$f" ] || return 0
+        grep -qxF -- "branch=$1" "$f" || return 0
+        val="$(sed -n "s/^$key=//p" "$f")"
+    fi
+    if [ "$key" = reason ]; then
+        [ -n "$val" ] && printf '%s\n' "$val"
+    else
+        printf '%s' "$val" | grep -qxE '[0-9a-f]{40}' && printf '%s\n' "$val"
+    fi
+    return 0
+}
+
+# stamp_release <branch> <reason>: the rules are in the header. Nothing is
+# written until every refusal has had its turn.
+stamp_release() {
+    local branch="$1" reason backend sc="" body stamped="" head at proj flags tmp rec
+    # One line, so a reason cannot write a key=value line of its own.
+    reason="$(printf '%s' "$2" | tr '\n\r' '  ')"
+    in_repo || refuse "not inside a git repository"
+    [ "$(pgit branch --show-current)" = "$branch" ] \
+        || refuse "stamp release: $branch is not the branch checked out here; releasing nothing"
+    backend="$(cmd_backend stamp)" || exit 1
+    if [ "$backend" = sidecar ]; then
+        sc="$(do_resolve)" || exit 1
+        stamped="$(stamp_recorded "$sc/reviews/$(branch_slug "$branch").json" "$branch")"
+    else
+        command -v gh >/dev/null 2>&1 \
+            || refuse "stamp release: the stamp is in the PR body and gh is not on PATH to read it; releasing nothing"
+        body="$(gh pr list --head "$branch" --json body -q '.[0].body // ""' </dev/null)" \
+            || refuse "stamp release: cannot read the PR body that holds the stamp; releasing nothing"
+        # The reader /closeout Step 2 uses; test-review-currency-marker.sh pins the two identical.
+        stamped="$(printf '%s\n' "$body" | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)"
+    fi
+    [ -n "$stamped" ] || refuse "stamp release: $branch has no review stamp, so there is nothing to release"
+    head="$(pgit rev-parse --verify -q 'HEAD^{commit}')" || refuse "stamp release: HEAD names no commit"
+    proj="$(lock_project)" || refuse "stamp release: cannot find the project directory"
+    flags="$proj/.claude"
+    at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$flags" || refuse "stamp release: cannot create $flags"
+    tmp="$(mktemp "$flags/.post-review-edit.XXXXXX")" || refuse "stamp release: cannot write in $flags"
+    if ! printf 'branch=%s\nreleased_at=%s\nhead=%s\nreason=%s\n' "$branch" "$at" "$head" "$reason" > "$tmp"; then
+        rm -f "$tmp"; refuse "stamp release: cannot write in $flags"
+    fi
+    if [ "$backend" = sidecar ]; then
+        rec="reviews/released/$(branch_slug "$branch").json"
+        if ! mkdir -p "$sc/reviews/released" \
+            || ! jq -n --arg b "$branch" --arg at "$at" --arg h "$head" --arg why "$reason" \
+                '{schema: 1, branch: $b, released_at: $at, head: $h, reason: $why}' > "$sc/$rec" \
+            || ! commit_paths "$sc" "sidecar: release the lock on $branch at ${head:0:7}" "$rec"; then
+            rm -f "$tmp"; refuse "stamp release: cannot record the release in $sc; the lock stays on"
+        fi
+    fi
+    mv "$tmp" "$flags/.post-review-edit" || { rm -f "$tmp"; refuse "stamp release: cannot write $flags/.post-review-edit; the lock stays on"; }
+    rm -f "$flags/.review-stamped" || refuse "stamp release: cannot remove $flags/.review-stamped; the lock stays on"
+    # No range: where the next review starts is /pre-merge Phase 1 step 4's to decide.
+    printf 'lock released: make the edit, then re-run /pre-merge to review it and re-stamp\n'
+}
+
+cmd_stamp() {
+    local sub="${1:-}" branch sha base="" reason="" sc f rel p tmp
+    [ $# -gt 0 ] && shift
+    case "$sub" in
+        write)
+            [ $# -ge 2 ] || die_usage "usage: sidecar.sh stamp write <branch> <sha> [--base-ref <ref>]"
+            branch="$1"; sha="$2"; shift 2
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --base-ref) [ $# -ge 2 ] || die_usage "stamp write: --base-ref needs a value"; base="$2"; shift 2 ;;
+                    *) die_usage "stamp write: unknown argument: $1" ;;
+                esac
+            done
+            ;;
+        read|clear)
+            [ $# -eq 1 ] || die_usage "usage: sidecar.sh stamp $sub <branch>"
+            branch="$1"
+            ;;
+        released)
+            if [ $# -eq 2 ] && [ "$2" = --reason ]; then reason=reason
+            elif [ $# -ne 1 ]; then die_usage "usage: sidecar.sh stamp released <branch> [--reason]"; fi
+            branch="$1"
+            ;;
+        release)
+            if [ $# -ne 3 ] || [ "$2" != --reason ]; then
+                die_usage "usage: sidecar.sh stamp release <branch> --reason <why>"
+            fi
+            branch="$1"; reason="$3"
+            case "$reason" in
+                *[![:space:]]*) ;;
+                *) die_usage "stamp release: --reason needs the reason for the edit; releasing nothing" ;;
+            esac
+            ;;
+        *) die_usage "usage: sidecar.sh stamp <write|read|released|clear|release> <branch> ..." ;;
+    esac
+    case "$branch" in ''|*$'\n'*) die_usage "stamp $sub: the branch must be one non-empty line" ;; esac
+    if [ "$sub" = write ] && ! printf '%s' "$sha" | grep -qxE '[0-9a-f]{40}'; then
+        refuse "stamp write refused: the SHA must be 40 lowercase hex characters (git rev-parse HEAD): $sha"
+    fi
+    if [ "$sub" = release ]; then stamp_release "$branch" "$reason"; return 0; fi
+    if [ "$sub" = released ]; then stamp_released "$branch" "${reason:-head}"; return 0; fi
+    sc="$(do_resolve)" || exit 1
+    f="reviews/$(branch_slug "$branch").json"
+    rel="reviews/released/$(branch_slug "$branch").json"
+    case "$sub" in
+        write)
+            mkdir -p "$sc/reviews" || refuse "stamp write: cannot create $sc/reviews"
+            tmp="$(mktemp "$sc/reviews/.stamp.XXXXXX")" || refuse "stamp write: cannot write in $sc/reviews"
+            if jq -n --arg b "$branch" --arg s "$sha" --arg r "$base" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                '{schema: 1, branch: $b, reviewed_sha: $s, base_ref: $r, at: $at}' > "$tmp"; then
+                mv "$tmp" "$sc/$f"
+            else
+                rm -f "$tmp"; refuse "stamp write: could not write $sc/$f"
+            fi
+            # A new stamp spends the release it follows.
+            set -- "$f"
+            if [ -f "$sc/$rel" ]; then
+                rm -f "$sc/$rel"
+                if sgit "$sc" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1; then set -- "$@" "$rel"; fi
+            fi
+            commit_paths "$sc" "sidecar: stamp $branch at ${sha:0:7}" "$@" || exit 1
+            ;;
+        read)
+            stamp_recorded "$sc/$f" "$branch"
+            ;;
+        clear)
+            set --
+            for p in "$f" "$rel"; do
+                [ -f "$sc/$p" ] || continue
+                rm -f "$sc/$p"
+                if sgit "$sc" ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then set -- "$@" "$p"; fi
+            done
+            if [ $# -gt 0 ]; then
+                commit_paths "$sc" "sidecar: clear stamp $branch" "$@" || exit 1
+            fi
+            ;;
+    esac
+}
+
+# fixrun_record: a fix-runs line as a trusted record, or nothing. A reader
+# counting rounds must not count a line it cannot parse, one whose sha is not a
+# full commit id, or one whose run id is not a timestamp; fixrun list and trace
+# both read through this definition, so the rule is stated once.
+# shellcheck disable=SC2016  # $-names are jq variables
+FIXRUN_JQ='
+def fixrun_record:
+  fromjson? // empty
+  | select(type == "object")
+  | select(.sha | strings | test("^[0-9a-f]{40}$"))
+  | select(.run | strings | test("^[0-9]{8}T[0-9]{6}Z$"));
+'
+
+cmd_fixrun() {
+    local sub="${1:-}" branch run="" sha="" thread="" work="" range="" in_range="" sc f line
+    [ $# -gt 0 ] && shift
+    case "$sub" in
+        record)
+            [ $# -ge 3 ] || die_usage "usage: sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>] [--work <W-n>]"
+            branch="$1"; run="$2"; sha="$3"; shift 3
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) [ $# -ge 2 ] || die_usage "fixrun record: --thread needs a value"; thread="$2"; shift 2 ;;
+                    --work) [ $# -ge 2 ] || die_usage "fixrun record: --work needs a value"; work="$2"; shift 2 ;;
+                    *) die_usage "fixrun record: unknown argument: $1" ;;
+                esac
+            done
+            [ -z "$work" ] || is_work_id "$work" || die_usage "fixrun record: --work must be an id like W-3: $work"
+            ;;
+        list)
+            [ $# -eq 1 ] || [ $# -eq 3 ] || die_usage "usage: sidecar.sh fixrun list <branch> [--range <rev-range>]"
+            branch="$1"
+            if [ $# -eq 3 ]; then
+                [ "$2" = --range ] || die_usage "fixrun list: unknown argument: $2"
+                range="$3"
+                [ -n "$range" ] || die_usage "fixrun list: --range needs a value"
+            fi
+            ;;
+        *) die_usage "usage: sidecar.sh fixrun <record|list> <branch> ..." ;;
+    esac
+    case "$branch" in ''|*$'\n'*) die_usage "fixrun $sub: the branch must be one non-empty line" ;; esac
+    if [ "$sub" = record ]; then
+        printf '%s' "$run" | grep -qxE '[0-9]{8}T[0-9]{6}Z' \
+            || refuse "fixrun record refused: the run id must be date -u +%Y%m%dT%H%M%SZ: $run"
+        printf '%s' "$sha" | grep -qxE '[0-9a-f]{40}' \
+            || refuse "fixrun record refused: the SHA must be 40 lowercase hex characters (git rev-parse HEAD): $sha"
+        case "$thread" in *[[:space:]]*) refuse "fixrun record refused: the thread URL carries whitespace: $thread" ;; esac
+    fi
+    sc="$(do_resolve)" || exit 1
+    f="fix-runs/$(branch_slug "$branch").jsonl"
+    case "$sub" in
+        record)
+            # cmd_work sets WORK_DIR; this verb does not go through it.
+            if [ -n "$work" ]; then
+                [ -f "$sc/work/$work.md" ] || {
+                    [ ! -d "$sc/work" ] || work_dir_listable "fixrun record" "$sc/work"
+                    refuse "fixrun record refused: --work names $work, which does not exist"
+                }
+            fi
+            mkdir -p "$sc/fix-runs" || refuse "fixrun record: cannot create $sc/fix-runs"
+            line="$(jq -cn --arg b "$branch" --arg r "$run" --arg s "$sha" --arg t "$thread" --arg w "$work" \
+                '{branch: $b, run: $r, sha: $s} + (if $t == "" then {} else {thread: $t} end)
+                 + (if $w == "" then {} else {work: $w} end)')" \
+                || refuse "fixrun record: could not build the record"
+            printf '%s\n' "$line" >> "$sc/$f" || refuse "fixrun record: could not write $sc/$f"
+            commit_paths "$sc" "sidecar: fix run $run on $branch at ${sha:0:7}" "$f" || exit 1
+            ;;
+        list)
+            if [ -n "$range" ]; then
+                in_range="$(pgit rev-list "$range" --)" || refuse "fixrun list: git rev-list $range failed"
+            fi
+            [ -f "$sc/$f" ] || return 0
+            # A line that does not parse, or names another branch, is skipped:
+            # a reader counting rounds must not count what it cannot trust.
+            # With --range, a record whose commit is outside the range is skipped
+            # too: a fold or rebase rewrites the SHA, and the record drops out.
+            jq -Rr --arg b "$branch" --arg r "$in_range" --arg ranged "${range:+yes}" "$FIXRUN_JQ"'
+                ($r | split("\n")) as $in
+                | fixrun_record
+                | select(.branch == $b)
+                | select($ranged == "" or (.sha as $s | $in | index([$s]) != null))
+                | "\(.sha) \(.run) \(.thread // "-")"' "$sc/$f"
+            ;;
+    esac
+}
+
+# Every skill in the pack, by directory name. scripts/test-guest-footprint.sh
+# fails when a directory with a SKILL.md is missing from it.
+PACK_SKILLS="api-design-review closeout compound correct-course create-milestone design-an-interface excavate execute fix-findings git-guardrails-claude-code handoff hackathon help improve-codebase-architecture improve-pipeline init-pipeline lfg mermaid prd-to-issues pre-merge prototype qa re-pitch request-refactor-plan research respond-to-review setup-pre-commit setup-ralph-loop shape tdd triage-issue ts-audit ubiquitous-language visual-recap walk-commits write-a-prd"
+
+cmd_footprint() {
+    local range log names accept=""
+    if [ $# -eq 3 ] && [ "$2" = --accept ]; then accept="$3"; set -- "$1"; fi
+    if [ $# -ne 1 ] || [ -z "$1" ]; then die_usage "usage: sidecar.sh footprint <rev-range> [--accept \"<short sha> ...\"]"; fi
+    range="$1"
+    # The matcher cannot tell a pack skill from a client's own /help route or W-9 form,
+    # so the operator can name the commits they confirmed are false matches.
+    case "$accept" in *[!0-9a-f\ ]*) die_usage "footprint: --accept takes short commit SHAs separated by spaces" ;; esac
+    in_repo || refuse "not inside a git repository"
+    # A unit-separator line between commits: no commit message can forge it by accident.
+    log="$(pgit log --format=$'\037%h%n%B' "$range" --)" \
+        || { printf 'sidecar.sh: footprint: git log %s failed; nothing was checked\n' "$range" >&2; exit 2; }
+    names="$(printf '%s' "$PACK_SKILLS" | tr ' ' '|')"
+    printf '%s\n' "$log" | awk -v names="$names" -v accept="$accept" '
+        BEGIN { n = split(accept, acc, " "); skill = "(^|[^A-Za-z0-9_./-])/(" names ")([^A-Za-z0-9_-]|$)"; found = 0 }
+        /^\037/ { sha = substr($0, 2); first = 1; next }
+        {
+            m = ""
+            if (first && $0 ~ /^(fixup|squash|amend)! /) m = "a " substr($0, 1, index($0, "!")) " subject"
+            else if ($0 ~ /^(Fix-Findings-Run|Review-Thread):/) m = "a " substr($0, 1, index($0, ":") - 1) " line"
+            else if ($0 ~ /(^|[^A-Za-z0-9_-])W-[0-9]+([^0-9]|$)/) m = "a W- work item id"
+            else if ($0 ~ skill) m = "a skill name"
+            first = 0
+            for (i = 1; i <= n; i++) if (acc[i] == sha) m = ""
+            if (m != "") { print sha " " m ": " $0; found = 1 }
+        }
+        END { exit found }'
+}
+
+WORK_ID_RE='W-[0-9]+'
+WORK_COMMENT_RE='^## Comment [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
+WORK_FIELDS='["id","kind","state","maturity","parent","blocked_by","decomposed_into","milestone","pr","branch","reviewed_sha","start_sha","lessons","superseded_by","created"]'
+
+# jq definitions shared by every work verb. parse_work reads a whole work file
+# (jq -Rs) into {fm, body, tail}: tail is the comment sections, kept as raw
+# text so a rewrite never re-renders a comment. render_work is its inverse.
+# Lines are split on "\n" rather than located with index(), which jq 1.6
+# counts in bytes while slicing counts codepoints.
+# shellcheck disable=SC2016  # $cre and $order are jq variables
+WORK_JQ='
+def trim_end: sub("\n+$"; "");
+def fm_value:
+  if . == "" then null
+  elif startswith("\"") then fromjson
+  elif startswith("[") then ltrimstr("[") | rtrimstr("]") | split(",") | map(gsub("^ +| +$"; "")) | map(select(length > 0))
+  else . end;
+def parse_work:
+  split("\n") as $l
+  | if $l[0] != "---" then error("no frontmatter") else . end
+  | ([range(1; $l | length) | select($l[.] == "---")] | .[0]) as $close
+  | if $close == null then error("unterminated frontmatter") else . end
+  | ($l[$close + 1:]) as $rest
+  | ([range(0; $rest | length) | select($rest[.] | test($cre))] | .[0] // ($rest | length)) as $c
+  | { fm: ($l[1:$close] | map(select(length > 0)
+          | (capture("^(?<k>[a-z_]+): ?(?<v>.*)$") // error("bad frontmatter line: \(.)"))
+          | {key: .k, value: (.v | fm_value)}) | from_entries),
+      body: ($rest[:$c] | join("\n") | trim_end),
+      tail: ($rest[$c:] | join("\n") | trim_end) };
+def comments:
+  .tail | split("\n")
+  | reduce .[] as $x ([];
+      if ($x | test($cre)) then . + [{at: ($x | ltrimstr("## Comment ")), lines: []}]
+      elif length == 0 then .
+      else .[-1].lines += [$x] end)
+  | map({at, body: (.lines | join("\n") | sub("^\n+"; "") | trim_end)});
+def fm_line($k; $v):
+  "\($k): " + ($v | if type == "array" then "[" + join(", ") + "]"
+                   elif ($k == "milestone" or $k == "pr" or $k == "branch" or type != "string") then tojson
+                   else . end);
+def render_work:
+  . as $w
+  | ($w.fm | to_entries | map(select(.value != null))) as $e
+  | ([$order[] as $k | $e[] | select(.key == $k)] + [$e[] | select(.key as $k | $order | index($k) | not)]) as $sorted
+  | "---\n" + ($sorted | map(fm_line(.key; .value) + "\n") | join(""))
+    + "---\n" + $w.body + "\n"
+    + (if $w.tail == "" then "" else "\n" + $w.tail + "\n" end);
+'
+
+# work_jq <args...>: jq with the work definitions and their two constants bound.
+work_jq() { jq --arg cre "$WORK_COMMENT_RE" --argjson order "$WORK_FIELDS" "$@"; }
+
+is_work_id() { [[ "$1" =~ ^${WORK_ID_RE}$ ]]; }
+
+# work_ids_csv <label> <csv>: validate a comma list of ids that must exist in
+# $WORK_DIR; prints the normalized list (comma-separated, no spaces).
+work_ids_csv() {
+    local label="$1" csv="$2" id out=""
+    for id in $(printf '%s' "$csv" | tr ',' '\n'); do
+        id="$(printf '%s' "$id" | tr -d ' ')"
+        [ -n "$id" ] || continue
+        is_work_id "$id" || die_usage "work: $label must be ids like W-3: $id"
+        [ -f "$WORK_DIR/$id.md" ] || {
+            work_dir_listable work "$WORK_DIR"
+            refuse "work: $label names $id, which does not exist"
+        }
+        out="${out:+$out,}$id"
+    done
+    printf '%s' "$out"
+}
+
+# work_body <file>: the body file's content, trailing newlines trimmed, or refuse.
+work_body() {
+    local f="$1" b
+    [ -f "$f" ] || refuse "work: no such body file: $f"
+    b="$(cat "$f")" || refuse "work: cannot read $f"
+    [ -n "$b" ] || refuse "work: the body in $f is empty"
+    if printf '%s\n' "$b" | grep -qE "$WORK_COMMENT_RE"; then
+        refuse "work: the body in $f contains a '## Comment <timestamp>' line, which only work comment writes"
+    fi
+    printf '%s' "$b"
+}
+
+# work_rewrite <id> <msg> <jq filter> [jq args...]: parse the item, apply the
+# filter to the parsed {fm, body, tail}, write it back atomically, and commit.
+work_rewrite() {
+    local id="$1" msg="$2" filter="$3" f tmp
+    shift 3
+    f="$WORK_DIR/$id.md"
+    tmp="$(mktemp "$WORK_DIR/.work.XXXXXX")" || refuse "work: cannot write in $WORK_DIR"
+    if ! work_jq -Rsj "$@" "$WORK_JQ parse_work | $filter | render_work" "$f" > "$tmp"; then
+        rm -f "$tmp"; refuse "work: could not update $f"
+    fi
+    mv "$tmp" "$f" || { rm -f "$tmp"; refuse "work: could not replace $f"; }
+    commit_paths "$WORK_SC" "$msg" "work/$id.md" || exit 1
+}
+
+# work_existing <id>: refuse unless the id is well-formed and its file exists.
+work_existing() {
+    is_work_id "$1" || die_usage "work: expected an id like W-3, got: $1"
+    [ -f "$WORK_DIR/$1.md" ] || {
+        [ ! -d "$WORK_DIR" ] || work_dir_listable work "$WORK_DIR"
+        refuse "work: no such work item: $1"
+    }
+}
+
+cmd_work() {
+    local sub="${1:-}"
+    [ $# -gt 0 ] && shift
+    case "$sub" in
+        create|view|edit|set|comment|close|list|lesson|pr-mode) ;;
+        *) die_usage "usage: sidecar.sh work <create|view|edit|set|comment|close|list|lesson|pr-mode> ..." ;;
+    esac
+    WORK_SC="$(do_resolve)" || exit 1
+    WORK_DIR="$WORK_SC/work"
+    "work_${sub//-/_}" "$@"
+}
+
+# lesson_norm <file>: the form `work lesson` stores for an existing file. A
+# lesson in the project's tree is stored relative to its top level, which is
+# what survives a worktree's removal; a lesson anywhere else (the sidecar's own
+# solutions store) is stored as its physical absolute path.
+lesson_norm() {
+    local abs top
+    abs="$(abs_path "$1")"
+    if in_repo; then
+        top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || top=""
+        case "$abs" in "$top"/*) abs="${abs#"$top"/}" ;; esac
+    fi
+    printf '%s' "$abs"
+}
+
+# lesson_resolve <stored>: the physical absolute path a stored lesson path
+# names, or nothing. An absolute path is taken as is; a relative one is tried
+# from this checkout's top level, then from the main checkout, so a lesson
+# committed on a branch is found from the worktree or from main.
+lesson_resolve() {
+    local stored="$1" b
+    case "$stored" in
+        /*) [ -f "$stored" ] && abs_path "$stored"; return 0 ;;
+    esac
+    if in_repo; then
+        for b in "$(pgit rev-parse --show-toplevel 2>/dev/null)" "$(main_checkout 2>/dev/null)"; do
+            [ -n "$b" ] || continue
+            if [ -f "$b/$stored" ]; then abs_path "$b/$stored"; return 0; fi
+        done
+    fi
+    return 0
+}
+
+work_lesson() {
+    local id="${1:-}" path="${2:-}" norm
+    [ $# -eq 2 ] || die_usage "usage: sidecar.sh work lesson <W-n> <lesson-path>"
+    work_existing "$id"
+    [ -f "$path" ] || refuse "work lesson refused: not a file: $path"
+    # The refusal tests the stored form, not the argument: the list is
+    # comma-separated, so what is written must be free of those characters,
+    # and an argument's spelling (a symlink, a `..`, an absolute path) can
+    # differ from what lesson_norm stores.
+    norm="$(lesson_norm "$path")"
+    case "$norm" in
+        *,*|*" "*|*"["*|*"]"*|*$'\n'*) refuse "work lesson refused: the path may not contain a comma, a space, a bracket, or a newline: $norm" ;;
+    esac
+    if work_jq -Rse "$WORK_JQ parse_work | any((.fm.lessons // [])[]; . == \$p)" --arg p "$norm" "$WORK_DIR/$id.md" >/dev/null 2>&1; then
+        printf 'work lesson: %s already lists %s\n' "$id" "$norm"
+        return 0
+    fi
+    # shellcheck disable=SC2016  # $-names are jq variables
+    work_rewrite "$id" "sidecar: work lesson $id" '.fm.lessons = ((.fm.lessons // []) + [$p])' --arg p "$norm"
+}
+
+work_create() {
+    local kind="" parent="" blocked="" milestone="" maturity="" bf="" body max b n tmp target fm i
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --kind)       [ $# -ge 2 ] || die_usage "work create: --kind needs a value"; kind="$2"; shift 2 ;;
+            --parent)     [ $# -ge 2 ] || die_usage "work create: --parent needs a value"; parent="$2"; shift 2 ;;
+            --blocked-by) [ $# -ge 2 ] || die_usage "work create: --blocked-by needs a value"; blocked="$2"; shift 2 ;;
+            --milestone)  [ $# -ge 2 ] || die_usage "work create: --milestone needs a value"; milestone="$2"; shift 2 ;;
+            --maturity)   [ $# -ge 2 ] || die_usage "work create: --maturity needs a value"; maturity="$2"; shift 2 ;;
+            --body-file)  [ $# -ge 2 ] || die_usage "work create: --body-file needs a value"; bf="$2"; shift 2 ;;
+            *) die_usage "work create: unknown argument: $1" ;;
+        esac
+    done
+    case "$kind" in prd|slice) ;; *) die_usage "work create: --kind must be prd or slice" ;; esac
+    [ -n "$bf" ] || die_usage "work create: --body-file is required"
+    case "$milestone" in *$'\n'*) die_usage "work create: --milestone must be one line" ;; esac
+    if [ "$kind" = prd ]; then
+        [ -z "$parent" ] || die_usage "work create: --parent is for slices"
+        maturity="${maturity:-prd}"
+        case "$maturity" in "roadmap bet"|research-ready|prd) ;; *) die_usage "work create: --maturity must be roadmap bet, research-ready, or prd" ;; esac
+    else
+        [ -z "$maturity" ] || die_usage "work create: --maturity is for prds"
+    fi
+    mkdir -p "$WORK_DIR" || refuse "work create: cannot create $WORK_DIR"
+    if [ -n "$parent" ]; then
+        is_work_id "$parent" || die_usage "work create: --parent must be an id like W-3: $parent"
+        [ -f "$WORK_DIR/$parent.md" ] || {
+            work_dir_listable "work create" "$WORK_DIR"
+            refuse "work create: --parent names $parent, which does not exist"
+        }
+    fi
+    blocked="$(work_ids_csv --blocked-by "$blocked")" || exit $?
+    body="$(work_body "$bf")" || exit 1
+    i=0
+    while [ "$i" -lt 50 ]; do
+        i=$((i + 1))
+        max=0
+        work_dir_listable "work create" "$WORK_DIR"
+        for b in "$WORK_DIR"/W-*.md; do
+            b="${b##*/W-}"; b="${b%.md}"
+            [[ "$b" =~ ^[0-9]+$ ]] || continue
+            [ "$((10#$b))" -le "$max" ] || max="$((10#$b))"
+        done
+        n="W-$((max + 1))"
+        fm="$(jq -n --arg id "$n" --arg kind "$kind" --arg m "$maturity" --arg p "$parent" \
+                --arg bl "$blocked" --arg ms "$milestone" --arg c "$(date +%Y-%m-%d)" \
+            '{id: $id, kind: $kind, state: "open",
+              maturity: (if $m == "" then null else $m end),
+              parent: (if $p == "" then null else $p end),
+              blocked_by: ($bl | split(",") | map(select(length > 0))),
+              milestone: (if $ms == "" then null else $ms end),
+              created: $c}')" || refuse "work create: could not build the frontmatter"
+        tmp="$(mktemp "$WORK_DIR/.work.XXXXXX")" || refuse "work create: cannot write in $WORK_DIR"
+        if ! work_jq -nj --argjson fm "$fm" --arg body "$body" "$WORK_JQ {fm: \$fm, body: \$body, tail: \"\"} | render_work" > "$tmp"; then
+            rm -f "$tmp"; refuse "work create: could not render $n"
+        fi
+        target="$WORK_DIR/$n.md"
+        # ln fails when the target exists, so of two racing writers exactly one
+        # claims a number; the other recomputes max and takes the next.
+        if ln "$tmp" "$target" 2>/dev/null; then
+            rm -f "$tmp"
+            if ! commit_paths "$WORK_SC" "sidecar: work create $n ($kind)" "work/$n.md"; then
+                rm -f "$target"; exit 1
+            fi
+            printf '%s\n' "$n"
+            return 0
+        fi
+        rm -f "$tmp"
+    done
+    refuse "work create: could not claim an id after 50 attempts"
+}
+
+work_view() {
+    local id="${1:-}" json=0
+    [ $# -ge 1 ] || die_usage "usage: sidecar.sh work view <W-n> [--json]"
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in --json) json=1; shift ;; *) die_usage "work view: unknown argument: $1" ;; esac
+    done
+    work_existing "$id"
+    if [ "$json" -eq 0 ]; then cat "$WORK_DIR/$id.md"; return 0; fi
+    work_jq -Rs "$WORK_JQ parse_work | .fm + {body, comments: comments}" "$WORK_DIR/$id.md" \
+        || refuse "work view: $WORK_DIR/$id.md does not parse"
+}
+
+work_edit() {
+    local id="${1:-}" bf="" cur new
+    [ $# -ge 1 ] || die_usage "usage: sidecar.sh work edit <W-n> --body-file <f>"
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --body-file) [ $# -ge 2 ] || die_usage "work edit: --body-file needs a value"; bf="$2"; shift 2 ;;
+            *) die_usage "work edit: unknown argument: $1" ;;
+        esac
+    done
+    [ -n "$bf" ] || die_usage "work edit: --body-file is required"
+    work_existing "$id"
+    new="$(work_body "$bf")" || exit 1
+    cur="$(work_jq -Rsr "$WORK_JQ parse_work | .body" "$WORK_DIR/$id.md")" || refuse "work edit: $WORK_DIR/$id.md does not parse"
+    # Ticking a checkbox keeps the length; a shorter body means content was dropped.
+    if [ "$(printf '%s' "$new" | wc -c)" -lt "$(printf '%s' "$cur" | wc -c)" ]; then
+        refuse "work edit refused: the new body is shorter than the one in $id; $id is unchanged"
+    fi
+    # shellcheck disable=SC2016  # $-names are jq variables
+    work_rewrite "$id" "sidecar: work edit $id" '.body = $body' --arg body "$new"
+}
+
+# work_dir_listable <verb> <dir>: refuse when <dir> cannot be listed.
+work_dir_listable() {
+    { [ -r "$2" ] && [ -x "$2" ]; } || refuse "$1: cannot list $2"
+}
+
+# work_all_fm <verb>: every work item's frontmatter, one compact JSON object
+# per line. A file that does not parse is refused with its path, never skipped:
+# an item left out of a listing reads as an item that is not there.
+work_all_fm() {
+    local verb="$1" f one
+    [ -d "$WORK_DIR" ] || return 0
+    work_dir_listable "$verb" "$WORK_DIR"
+    for f in "$WORK_DIR"/W-*.md; do
+        [ -f "$f" ] || continue
+        # A parse failure is the assignment's exit status, never a word in the
+        # output: an item's own frontmatter (a milestone, a pr URL) can say anything.
+        one="$(work_jq -Rsc "$WORK_JQ parse_work | .fm" "$f")" || refuse "$verb: $f does not parse"
+        printf '%s\n' "$one"
+    done
+}
+
+# work_blocked_by_cycle <id> <csv>: refuse when giving <id> these blockers
+# would make <id> wait on itself through the stored edges. create cannot make
+# a cycle (its blockers exist before it does); set can, and a cycle leaves
+# every item on it blocked for good.
+work_blocked_by_cycle() {
+    local id="$1" csv="$2" all
+    [ -n "$csv" ] || return 0
+    all="$(work_all_fm "work set")" || exit 1
+    # shellcheck disable=SC2016  # $-names are jq variables
+    printf '%s\n' "$all" | jq -se --arg id "$id" --arg v "$csv" '
+        (map({key: .id, value: (.blocked_by // [])}) | from_entries) as $m
+        | def reach($seen; $todo):
+            if $todo == [] then $seen
+            elif any($seen[]; . == $todo[0]) then reach($seen; $todo[1:])
+            else reach($seen + [$todo[0]]; $todo[1:] + ($m[$todo[0]] // [])) end;
+          reach([]; $v | split(",")) | any(.[]; . == $id) | not' >/dev/null
+    case $? in
+        0) return 0 ;;
+        1) refuse "work set refused: blocked_by $csv would make a cycle, since one of them already waits on $id; $id is unchanged" ;;
+        *) refuse "work set: could not check blocked_by $csv for a cycle; $id is unchanged" ;;
+    esac
+}
+
+work_set() {
+    local id="${1:-}" field="${2:-}" value="${3-}" kind
+    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|blocked_by|pr|pr_mode|branch|reviewed_sha|start_sha> <value>"
+    work_existing "$id"
+    case "$value" in *$'\n'*) die_usage "work set: the value must be one line" ;; esac
+    kind="$(work_jq -Rsr "$WORK_JQ parse_work | .fm.kind" "$WORK_DIR/$id.md")" || refuse "work set: $WORK_DIR/$id.md does not parse"
+    case "$field" in
+        state) case "$value" in open|built|closed) ;; *) die_usage "work set: state must be open, built, or closed" ;; esac ;;
+        maturity)
+            [ "$kind" = prd ] || refuse "work set: maturity is for prds; $id is a $kind"
+            case "$value" in "roadmap bet"|research-ready|prd) ;; *) die_usage "work set: maturity must be roadmap bet, research-ready, or prd" ;; esac ;;
+        decomposed_into)
+            [ "$kind" = prd ] || refuse "work set: decomposed_into is for prds; $id is a $kind"
+            value="$(work_ids_csv decomposed_into "$value")" || exit $? ;;
+        blocked_by)
+            # Validated as create's --blocked-by is; "" declares no blockers.
+            value="$(work_ids_csv blocked_by "$value")" || exit $?
+            work_blocked_by_cycle "$id" "$value" ;;
+        pr) [ -n "$value" ] || die_usage "work set: pr needs a value" ;;
+        # none: this branch gets no PR of its own (Stamp only). pr is the default
+        # an item without the field has, and takes the choice back.
+        pr_mode) case "$value" in pr|none) ;; *) die_usage "work set: pr_mode must be pr or none" ;; esac ;;
+        branch) [ -n "$value" ] || die_usage "work set: branch needs a value" ;;
+        reviewed_sha|start_sha)
+            printf '%s' "$value" | grep -qxE '[0-9a-f]{40}' || refuse "work set refused: $field must be 40 lowercase hex characters: $value" ;;
+        *) die_usage "work set: field must be state, maturity, decomposed_into, blocked_by, pr, pr_mode, branch, reviewed_sha, or start_sha" ;;
+    esac
+    if [ "$field" = decomposed_into ] || [ "$field" = blocked_by ]; then
+        # Replaced, never appended to: the reader always sees the latest list.
+        # shellcheck disable=SC2016  # $-names are jq variables
+        work_rewrite "$id" "sidecar: work set $id $field" '.fm[$k] = ($v | split(",") | map(select(length > 0)))' --arg k "$field" --arg v "$value"
+    else
+        # shellcheck disable=SC2016  # $-names are jq variables
+        work_rewrite "$id" "sidecar: work set $id $field" '.fm[$k] = $v' --arg k "$field" --arg v "$value"
+    fi
+}
+
+work_comment() {
+    local id="${1:-}" bf="" body
+    [ $# -ge 1 ] || die_usage "usage: sidecar.sh work comment <W-n> --body-file <f>"
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --body-file) [ $# -ge 2 ] || die_usage "work comment: --body-file needs a value"; bf="$2"; shift 2 ;;
+            *) die_usage "work comment: unknown argument: $1" ;;
+        esac
+    done
+    [ -n "$bf" ] || die_usage "work comment: --body-file is required"
+    work_existing "$id"
+    body="$(work_body "$bf")" || exit 1
+    # shellcheck disable=SC2016  # $-names are jq variables
+    work_rewrite "$id" "sidecar: work comment $id" \
+        '.tail = ((if .tail == "" then "" else .tail + "\n\n" end) + "## Comment \($at)\n\n\($c)")' \
+        --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg c "$body"
+}
+
+work_close() {
+    local id="${1:-}" sup=""
+    [ $# -ge 1 ] || die_usage "usage: sidecar.sh work close <W-n> [--superseded-by W-m]"
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --superseded-by) [ $# -ge 2 ] || die_usage "work close: --superseded-by needs a value"; sup="$2"; shift 2 ;;
+            *) die_usage "work close: unknown argument: $1" ;;
+        esac
+    done
+    work_existing "$id"
+    if [ -n "$sup" ]; then
+        work_existing "$sup"
+        [ "$sup" != "$id" ] || die_usage "work close: an item cannot supersede itself"
+    fi
+    # shellcheck disable=SC2016  # $-names are jq variables
+    work_rewrite "$id" "sidecar: work close $id" \
+        '.fm.state = "closed" | if $s == "" then . else .fm.superseded_by = $s end' --arg s "$sup"
+}
+
+# work_branch_in_head <branch>: exit 0 when a built item recorded on <branch>
+# is available to build on here: <branch> is checked out, or its tip is an
+# ancestor of HEAD (git merge-base --is-ancestor,
+# https://git-scm.com/docs/git-merge-base). The tip is refs/heads/<branch>,
+# then refs/remotes/origin/<branch>: the local branch is where /execute
+# committed the slice, and the remote-tracking ref stands in for it once the
+# local branch is gone, pushed and then removed with its worktree. No other
+# remote is read. A branch that resolves to neither is not available.
+work_branch_in_head() {
+    local b="$1" tip
+    [ -n "$b" ] || return 1
+    in_repo || return 1
+    [ "$b" = "$(pgit branch --show-current 2>/dev/null)" ] && return 0
+    tip="$(pgit rev-parse -q --verify "refs/heads/$b^{commit}" 2>/dev/null)" \
+        || tip="$(pgit rev-parse -q --verify "refs/remotes/origin/$b^{commit}" 2>/dev/null)" \
+        || return 1
+    pgit merge-base --is-ancestor "$tip" HEAD 2>/dev/null
+}
+
+work_list() {
+    local kind="" parent="" branch="" unblocked=0 state=open all
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --kind)   [ $# -ge 2 ] || die_usage "work list: --kind needs a value"; kind="$2"; shift 2 ;;
+            --branch) { [ $# -ge 2 ] && [ -n "$2" ]; } || die_usage "work list: --branch needs a value"; branch="$2"; shift 2 ;;
+            --parent) [ $# -ge 2 ] || die_usage "work list: --parent needs a value"; parent="$2"; shift 2 ;;
+            --state)  [ $# -ge 2 ] || die_usage "work list: --state needs a value"; state="$2"; shift 2 ;;
+            --unblocked) unblocked=1; shift ;;
+            *) die_usage "work list: unknown argument: $1" ;;
+        esac
+    done
+    case "$kind" in ''|prd|slice) ;; *) die_usage "work list: --kind must be prd or slice" ;; esac
+    case "$state" in open|built|closed|all) ;; *) die_usage "work list: --state must be open, built, closed, or all" ;; esac
+    [ -z "$parent" ] || is_work_id "$parent" || die_usage "work list: --parent must be an id like W-3: $parent"
+    [ -d "$WORK_DIR" ] || return 0
+    all="$(work_all_fm "work list")" || exit 1
+    # The built items whose commits HEAD holds (work_branch_in_head), read only
+    # for --unblocked, because each one costs a git call.
+    met='[]'
+    if [ "$unblocked" -eq 1 ]; then
+        while IFS=$'\t' read -r bid bbr; do
+            [ -n "$bid" ] || continue
+            if work_branch_in_head "$bbr"; then
+                # shellcheck disable=SC2016  # $-names are jq variables
+                met="$(jq -c --arg i "$bid" '. + [$i]' <<<"$met")" || refuse "work list: could not read the built items"
+            fi
+        done <<<"$(printf '%s\n' "$all" | jq -r 'select(type == "object" and .state == "built") | [.id, (.branch // "")] | @tsv')"
+    fi
+    # An --unblocked item is open, and each blocked_by id is closed, or built
+    # with its commits in HEAD; an id missing from the store counts as open,
+    # so a typo never unblocks. --state open is every item not closed: a built
+    # slice is still waiting on its merge.
+    printf '%s\n' "$all" | jq -rs --arg k "$kind" --arg p "$parent" --arg br "$branch" --arg s "$state" --argjson u "$unblocked" --argjson met "$met" '
+        map(select(. != null)) as $items
+        | ($items | map({key: .id, value: .state}) | from_entries) as $st
+        | $items
+        | map(select(($k == "" or .kind == $k)
+                 and ($p == "" or .parent == $p)
+                 and ($br == "" or .branch == $br)
+                 and (if $u == 1 then .state == "open" and ((.blocked_by // []) | all(. as $b | $st[$b] == "closed" or ($st[$b] == "built" and any($met[]; . == $b))))
+                      elif $s == "all" then true elif $s == "open" then .state != "closed" else .state == $s end)))
+        | sort_by(.id | ltrimstr("W-") | tonumber)
+        | .[].id'
+}
+
+# work_pr_mode [<W-n>] [--branch <name>]: whether a branch records Stamp only,
+# the one read /pre-merge's Phase 2 and its menu both make. The items read are
+# <W-n> (whatever its state) and every item not closed on <name>; the first that
+# records pr_mode none, <W-n> before the branch's in id order, answers
+# "none <its id>", and otherwise the answer is "pr". A <W-n> that names no item
+# records nothing, so it is not an error, and an empty <name> reads no branch.
+# A failed read exits non-zero and prints no answer.
+work_pr_mode() {
+    local id="" branch="" all
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --branch) [ $# -ge 2 ] || die_usage "work pr-mode: --branch needs a value"; branch="$2"; shift 2 ;;
+            -*) die_usage "work pr-mode: unknown argument: $1" ;;
+            *) [ -z "$id" ] || die_usage "usage: sidecar.sh work pr-mode [<W-n>] [--branch <name>]"; id="$1"; shift ;;
+        esac
+    done
+    all="$(work_all_fm "work pr-mode")" || exit 1
+    # shellcheck disable=SC2016  # $-names are jq variables
+    printf '%s\n' "$all" | jq -rs --arg w "$id" --arg br "$branch" '
+        map(select(. != null)) as $items
+        | [$items[] | select(.id == $w)]
+          + ($items | map(select($br != "" and .branch == $br and .state != "closed")) | sort_by(.id | ltrimstr("W-") | tonumber))
+        | map(select(.pr_mode == "none"))
+        | if length > 0 then "none \(.[0].id)" else "pr" end' \
+        || refuse "work pr-mode: could not read the work items"
+}
+
+# trace's text extraction, appended to WORK_JQ. section($h) is the lines after
+# a line exactly $h up to the next "## " line, or null when $h is absent.
+# md_refs is every backtick token and markdown link target on the input lines
+# that ends in .md (with an optional #anchor), web URLs excluded.
+# shellcheck disable=SC2016  # $-names are jq variables
+TRACE_JQ='
+def section($h):
+  split("\n") as $l
+  | ([range(0; $l | length) | select($l[.] == $h)] | .[0]) as $s
+  | if $s == null then null
+    else ($l[$s + 1:]) as $r
+      | ([range(0; $r | length) | select($r[.] | startswith("## "))] | .[0] // ($r | length)) as $e
+      | $r[:$e] end;
+def md_refs:
+  [.[] | match("`([^`]+)`|\\]\\(([^) ]+)[^)]*\\)"; "g") | .captures | map(select(.string != null)) | .[0].string
+   | select(test("\\.md(#[^ ]*)?$")) | select(test("^https?://") | not)];
+def lesson_lines:
+  split("\n")
+  | reduce .[] as $x ({mode: null, out: []};
+      if $x == "## Related" then .mode = "rel"
+      elif .mode == "rel" then (if ($x | startswith("## ")) then .mode = null else .out += [$x] end)
+      elif ($x | contains("Sibling docs:")) then .mode = "sib" | .out += [$x]
+      elif .mode == "sib" then
+        (if ($x | test("^[ \t]*$")) or ($x | startswith("#")) then .mode = null
+         elif ($x | test("^[ \t]|^ *[-*]")) then .out += [$x]
+         else .mode = null end)
+      else . end)
+  | .out;
+'
+
+# abs_path <existing path>: its physical absolute path.
+abs_path() { printf '%s/%s\n' "$(cd "$(dirname "$1")" && pwd -P)" "$(basename "$1")"; }
+
+cmd_trace() {
+    local subject="" json=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) json=1 ;;
+            -*) die_usage "trace: unknown argument: $1" ;;
+            *) [ -z "$subject" ] || die_usage "usage: sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]"; subject="$1" ;;
+        esac
+        shift
+    done
+    [ -n "$subject" ] || die_usage "usage: sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]"
+    command -v jq >/dev/null 2>&1 || refuse "trace: jq is required and is not on PATH"
+    if is_work_id "$subject"; then trace_work "$subject" "$json"; else trace_lesson "$subject" "$json"; fi
+}
+
+# trace_research <cited> <via>: one research entry as JSON. newer is every
+# <slug>-YYYY-MM-DD.md beside the resolved file with the same slug and a later
+# date, ascending: /research supersedes an entry with a new dated file.
+trace_research() {
+    local cited="$1" via="$2" probe res="" newer="" re base slug date cand cb
+    probe="$cited"
+    # shellcheck disable=SC2088  # the literal ~ is the point
+    case "$probe" in "~/"*) probe="$HOME/${probe#"~/"}" ;; esac
+    case "$probe" in *"#"*) [ -e "$probe" ] || probe="${probe%%#*}" ;; esac
+    if [ -f "$probe" ]; then
+        res="$(abs_path "$probe")"
+        re='^(.+)-([0-9]{4}-[0-9]{2}-[0-9]{2})\.md$'
+        base="$(basename "$res")"
+        if [[ "$base" =~ $re ]]; then
+            slug="${BASH_REMATCH[1]}"; date="${BASH_REMATCH[2]}"
+            for cand in "$(dirname "$res")/$slug"-*.md; do
+                [ -f "$cand" ] || continue
+                cb="$(basename "$cand")"
+                [[ "$cb" =~ $re ]] || continue
+                [ "${BASH_REMATCH[1]}" = "$slug" ] || continue
+                [[ "${BASH_REMATCH[2]}" > "$date" ]] || continue
+                newer="${newer:+$newer$'\n'}$cand"
+            done
+        fi
+    fi
+    # shellcheck disable=SC2016  # $-names are jq variables
+    jq -nc --arg c "$cited" --arg r "$res" --arg v "$via" --arg nw "$newer" \
+        '{cited: $c, resolved: (if $r == "" then null else $r end),
+          via: (if $v == "" then null else $v end),
+          newer: ($nw | split("\n") | map(select(length > 0)) | sort)}'
+}
+
+trace_work() {
+    local id="$1" json="$2" sc dir f one all="" base cited via research="" rr="null" pr out
+    local fixruns="" branchruns="" branch rec fr bfr lp lres lmap='{}'
+    sc="$(do_resolve)" || exit 1
+    sc="$(cd "$sc" && pwd -P)"
+    dir="$sc/work"
+    [ ! -d "$dir" ] || work_dir_listable trace "$dir"
+    [ -f "$dir/$id.md" ] || refuse "trace: no such work item: $id"
+    for f in "$dir"/W-*.md; do
+        [ -f "$f" ] || continue
+        one="$(work_jq -Rsc "$WORK_JQ parse_work | .fm + {body, comments: comments}" "$f")" \
+            || refuse "trace: $f does not parse"
+        all="$all$one"$'\n'
+    done
+    # The graph, from every item at once; research paths are resolved below,
+    # because jq cannot test whether a file exists.
+    # shellcheck disable=SC2016  # $-names are jq variables
+    base="$(printf '%s' "$all" | jq -sc --arg id "$id" "$TRACE_JQ"'
+        def idn: .id | ltrimstr("W-") | tonumber;
+        def note($h): [.comments[] | select((.body | split("\n") | .[0]) == $h)] | last | if . == null then null else .at end;
+        . as $all
+        | (map({key: .id, value: .}) | from_entries) as $by
+        | def ref($i): {id: $i, state: ($by[$i].state // "missing")};
+        def research_lines:
+          (section("## Research Reference") // [])
+          + [split("\n")[] | select(test("^[-*] \\*\\*Research:\\*\\*"))]
+          | map(select(test("\\S")));
+        $by[$id] as $it
+        | ((($it.body // "") | research_lines) as $own
+           | if ($own | length) == 0 and $it.kind == "slice" and $it.parent != null
+             then {lines: (($by[$it.parent].body // "") | research_lines), via: $it.parent}
+             else {lines: $own, via: null} end) as $rs
+        | {kind: "work", id: $id,
+           item: ($it | del(.body, .comments)),
+           parent: (if $it.parent == null then null else ref($it.parent) end),
+           children: [$all[] | select(.parent == $id)] | sort_by(idn) | map({id, kind, state, pr: (.pr // null), lessons: (.lessons // [])}),
+           decomposed_into: [($it.decomposed_into // [])[] | ref(.)],
+           blocked_by: [($it.blocked_by // [])[] | ref(.)],
+           blocks: [$all[] | select(any((.blocked_by // [])[]; . == $id))] | sort_by(idn) | map({id, state}),
+           superseded_by: (if $it.superseded_by == null then null else ref($it.superseded_by) end),
+           supersedes: [$all[] | select(.superseded_by == $id)] | sort_by(idn) | map({id, state}),
+           research_cited: ($rs.lines | md_refs | reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end)),
+           via: $rs.via,
+           spike_issues: [$rs.lines[] | match("Refs #([0-9]+)"; "g") | .captures[0].string | tonumber],
+           review_notes: ($it | note("## Review Notes")),
+           disposition_ledger: ($it | note("## Review Disposition Ledger"))}')" \
+        || refuse "trace: could not read the work store in $dir"
+    via="$(printf '%s' "$base" | jq -r '.via // empty')"
+    cited="$(printf '%s' "$base" | jq -r '.research_cited[]')"
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        research="$research$(trace_research "$f" "$via")"$'\n'
+    done <<<"$cited"
+    # Lesson paths are resolved here, for the item and its children together,
+    # because jq cannot test whether a file exists. A path that resolves to
+    # nothing is reported as missing, never as an error.
+    while IFS= read -r lp; do
+        [ -n "$lp" ] || continue
+        lres="$(lesson_resolve "$lp")"
+        # shellcheck disable=SC2016  # $-names are jq variables
+        lmap="$(jq -nc --argjson m "$lmap" --arg k "$lp" --arg v "$lres" '$m + {($k): (if $v == "" then null else $v end)}')"
+    done <<<"$(printf '%s' "$base" | jq -r '([.item.lessons // []] + [.children[] | .lessons // []]) | add | unique | .[]')"
+    # The pr field is a URL; GitHub and Bitbucket both end it in the number.
+    pr="$(printf '%s' "$base" | jq -r '.item.pr // empty')"
+    if [[ "$pr" =~ /([0-9]+)/?$ ]] && [ -f "$sc/review-responses/pr-${BASH_REMATCH[1]}.md" ]; then
+        rr="$(jq -n --arg p "$sc/review-responses/pr-${BASH_REMATCH[1]}.md" '$p')"
+    fi
+    # Fix runs: every trusted record naming this item, in any branch's file
+    # (branch names get reused and items move), and the branch's own records
+    # that name no item, which a branch alone cannot attribute to this one.
+    for f in "$sc"/fix-runs/*.jsonl; do
+        [ -f "$f" ] || continue
+        rec="$(jq -Rc "$FIXRUN_JQ"'fixrun_record' "$f")" || continue
+        [ -z "$rec" ] || fixruns="$fixruns$rec"$'\n'
+    done
+    branch="$(printf '%s' "$base" | jq -r '.item.branch // empty')"
+    if [ -n "$branch" ] && [ -f "$sc/fix-runs/$(branch_slug "$branch").jsonl" ]; then
+        branchruns="$(jq -Rc "$FIXRUN_JQ"'fixrun_record' "$sc/fix-runs/$(branch_slug "$branch").jsonl")" || branchruns=""
+    fi
+    # shellcheck disable=SC2016  # $-names are jq variables
+    fr="$(printf '%s' "$fixruns" | jq -sc --arg id "$id" '
+        map(select(.work == $id)) | sort_by(.run) | map({run, sha, branch, thread: (.thread // null)})')" \
+        || refuse "trace: could not read the fix runs in $sc/fix-runs"
+    # shellcheck disable=SC2016  # $-names are jq variables
+    bfr="$(printf '%s' "$branchruns" | jq -sc --arg br "$branch" '
+        map(select(.branch == $br and (has("work") | not))) | sort_by(.run) | map({run, sha, branch, thread: (.thread // null)})')" \
+        || refuse "trace: could not read the fix runs in $sc/fix-runs"
+    out="$(printf '%s' "$research" | jq -sc --argjson b "$base" --argjson rr "$rr" --argjson fr "$fr" --argjson bfr "$bfr" --argjson lm "$lmap" '
+        def lessons: map({path: ., resolved: $lm[.]});
+        . as $r
+        | $b | {kind, id, item, parent, decomposed_into, blocked_by, blocks,
+                superseded_by, supersedes, research: $r, spike_issues,
+                lessons: ((.item.lessons // []) | lessons),
+                children: (.children | map(. + {lessons: (.lessons | lessons)})),
+                review_responses: $rr, review_notes, disposition_ledger,
+                fix_runs: $fr, branch_fix_runs: $bfr}')" \
+        || refuse "trace: could not assemble the trace for $id"
+    if [ "$json" -eq 1 ]; then printf '%s\n' "$out" | jq .; return 0; fi
+    printf '%s\n' "$out" | jq -r '
+        def w: "\(.id) (\(.state))";
+        def lesson_line: if .resolved then "lesson  \(.resolved)" else "lesson  MISSING: \(.path)" end;
+        "\(.id)  \(.item.kind)  \(.item.state)",
+        (if .parent then "  parent  \(.parent | w)" else empty end),
+        (.children[] | "  child  \(w)", (.lessons[] | "    \(lesson_line)")),
+        (.decomposed_into[] | "  decomposed into  \(w)"),
+        (.blocked_by[] | "  blocked by  \(w)"),
+        (.blocks[] | "  blocks  \(w)"),
+        (if .superseded_by then "  superseded by  \(.superseded_by | w)" else empty end),
+        (.supersedes[] | "  supersedes  \(w)"),
+        (if .item.pr then "  pr  \(.item.pr)" else empty end),
+        (if .item.pr_mode then "  pr mode  \(.item.pr_mode)" else empty end),
+        (if .item.branch then "  branch  \(.item.branch)" else empty end),
+        (if .item.reviewed_sha then "  last reviewed  \(.item.reviewed_sha)" else empty end),
+        (.research[] | (if .via then " (via \(.via))" else "" end) as $v
+                     | (if .resolved then "  research  \(.resolved)\($v)" else "  research  MISSING: \(.cited)\($v)" end),
+                       (.newer[] | "  newer research  \(.)")),
+        (.spike_issues[] | "  spike issue  #\(.)"),
+        (.lessons[] | "  \(lesson_line)"),
+        (if .review_responses then "  review responses  \(.review_responses)" else empty end),
+        (if .review_notes then "  review notes  \(.review_notes)" else empty end),
+        (if .disposition_ledger then "  disposition ledger  \(.disposition_ledger)" else empty end),
+        (.fix_runs[] | "  fix run  \(.run) \(.sha) on \(.branch)" + (if .thread then " thread \(.thread)" else "" end)),
+        (.branch_fix_runs[] | "  branch-level fix run  \(.run) \(.sha) on \(.branch)" + (if .thread then " thread \(.thread)" else "" end))'
+}
+
+# lesson_cites <lesson> <top> <dirs>: one tab-separated line per citation in
+# file order, "C|O <cited> <resolved>" (inside a solutions dir or not) or
+# "M <cited>". <top> is the project's top level ("" outside a repo); <dirs> is
+# the physical solutions dirs, one per line. When require's lookup misses, two
+# more forms lessons use are tried: <category>/<name>.md from the lesson's own
+# store root, then a path from <top>.
+lesson_cites() {
+    local lesson="$1" top="$2" dirs="$3" toks tok hit d where b
+    toks="$(jq -Rsr "$TRACE_JQ"'lesson_lines | md_refs | .[]' "$lesson")" || return 0
+    while IFS= read -r tok; do
+        [ -n "$tok" ] || continue
+        if ! hit="$(resolve_cited "$tok" "$lesson")"; then
+            hit=""
+            # shellcheck disable=SC2088  # the literal ~ is the point
+            case "$tok" in
+                /*|"~/"*) ;;
+                *) for b in "$(dirname "$(dirname "$lesson")")" "$top"; do
+                       [ -n "$b" ] || continue
+                       if [ -e "$b/$tok" ]; then hit="$(abs_path "$b/$tok")"; break
+                       elif [ -e "$b/${tok%%#*}" ]; then hit="$(abs_path "$b/${tok%%#*}")"; break; fi
+                   done ;;
+            esac
+        fi
+        if [ -z "$hit" ]; then printf 'M\t%s\n' "$tok"; continue; fi
+        [ "$hit" != "$lesson" ] || continue
+        where=O
+        while IFS= read -r d; do
+            [ -n "$d" ] || continue
+            case "$hit" in "$d"/*) where=C ;; esac
+        done <<<"$dirs"
+        printf '%s\t%s\t%s\n' "$where" "$tok" "$hit"
+    done <<<"$toks"
+}
+
+# lesson_links <lesson> <own dirs> <group dirs>: the lesson's replaces and
+# related names, each with every file it resolves to, then the lessons whose
+# replaces names this one, as tab-separated lines for trace:
+#   N <replaces|related> <name>        one per name, in file order
+#   R <replaces|related> <name> <own|rel> <path>   one per file a name resolves to
+#   B <own|rel> <path>                 one per lesson that replaces this one
+# "Replaced by" is derived here from every lesson's replaces; nothing stores it.
+lesson_links() {
+    local self="$1" own="$2" rel="$3" rec base idx key n name tag path rp
+    base="${self##*/}"
+    rec="$(awk "$LESSONS_SCAN_AWK" "$self")" || return 1
+    # The scan below reads the same group folders and warns for them, so the
+    # index stays quiet here and a bad folder draws one warning per trace.
+    idx="$(LESSONS_GROUP_QUIET=1 lessons_index "$own" "$rel")" || return 1
+    for key in replaces related; do
+        if [ "$key" = replaces ]; then n="$(printf '%s' "$rec" | cut -f4)"; else n="$(printf '%s' "$rec" | cut -f5)"; fi
+        while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            printf 'N\t%s\t%s\n' "$key" "$name"
+            while IFS=$'\t' read -r tag path; do
+                [ -n "$path" ] || continue
+                [ "${path##*/}" = "$name" ] || continue
+                printf 'R\t%s\t%s\t%s\t%s\n' "$key" "$name" "$tag" "$path"
+            done <<<"$idx"
+        done <<<"$(printf '%s' "$n" | tr ',' '\n')"
+    done
+    for tag in own rel; do
+        if [ "$tag" = own ]; then rp="$(lessons_scan "$own")" || return 1
+        else rp="$(lessons_scan_group "$rel")"; fi
+        while IFS=$'\t' read -r path _ _ n _; do
+            if ! { [ -n "$n" ] && [ "$path" != "$self" ]; }; then continue; fi
+            case ",$n," in *",$base,"*) printf 'B\t%s\t%s\n' "$tag" "$path" ;; esac
+        done <<<"$rp"
+    done
+}
+
+trace_lesson() {
+    local file="$1" json="$2" self top="" raw dirs="" d lines cand by="" out tb="" wsc wf wl wid wkind wstate wpath rel="" rdirs rerr links
+    [ -f "$file" ] || refuse "trace: no such work item or file: $file"
+    self="$(abs_path "$file")"
+    # solutions-dirs names in-tree dirs relative to the cwd, so it is asked from
+    # the project's top level: a trace run from a subdirectory must still see an
+    # in-tree lesson as a lesson. A dir that does not exist holds no lesson to
+    # cite or be cited by. Outside a repo there is no sidecar to ask, and its
+    # refusal would only be noise here.
+    raw="docs/solutions"
+    if in_repo; then
+        top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || top=""
+        raw="$(cd "${top:-.}" && cmd_solutions_dirs)" || refuse "trace: could not list the lesson directories"
+    fi
+    while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        case "$d" in /*) ;; *) d="${top:-$PWD}/$d" ;; esac
+        [ -d "$d" ] || continue
+        dirs="${dirs:+$dirs$'\n'}$(cd "$d" && pwd -P)"
+    done <<<"$raw"
+    lines="$(lesson_cites "$self" "$top" "$dirs")"
+    # taught_by: the work items whose lessons field names this file. A trace of
+    # a lesson works on a repo with no sidecar, so a missing one is an empty
+    # answer, never a refusal and never a SIDECAR MISS line.
+    if in_repo && wsc="$(do_resolve 2>/dev/null)" && [ -d "$wsc/work" ]; then
+        [ -z "$top" ] || case "$self" in "$top"/*) rel="${self#"$top"/}" ;; esac
+        for wf in "$wsc"/work/W-*.md; do
+            [ -f "$wf" ] || continue
+            # shellcheck disable=SC2016  # $-names are jq variables
+            wl="$(work_jq -Rsr "$WORK_JQ"'parse_work | .fm as $f | ($f.lessons // [])[] | [$f.id, $f.kind, $f.state, .] | @tsv' "$wf" 2>/dev/null)" || continue
+            while IFS=$'\t' read -r wid wkind wstate wpath; do
+                [ -n "$wid" ] || continue
+                if [ "$(lesson_resolve "$wpath")" = "$self" ] || { [ -n "$rel" ] && [ "$wpath" = "$rel" ]; }; then
+                    tb="${tb:+$tb$'\n'}$wid"$'\t'"$wkind"$'\t'"$wstate"
+                fi
+            done <<<"$wl"
+        done
+    fi
+    # cited_by: a cheap grep on the basename, then the same extraction and
+    # resolution as above, so a mention outside Related never counts.
+    while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        while IFS= read -r cand; do
+            [ -n "$cand" ] || continue
+            [ "$cand" != "$self" ] || continue
+            if lesson_cites "$cand" "$top" "$dirs" 2>/dev/null | cut -f3 | grep -qxF -- "$self"; then
+                by="${by:+$by$'\n'}$cand"
+            fi
+        done <<<"$(find "$d" -type f -name '*.md' -exec grep -lF -- "$(basename "$self")" {} + 2>/dev/null)"
+    done <<<"$dirs"
+    # shellcheck disable=SC2016  # $-names are jq variables
+    out="$(printf '%s\n' "$lines" | jq -Rnc --arg path "$self" --arg by "$by" --arg tb "$tb" '
+        [inputs | select(length > 0) | split("\t")] as $r
+        | def firsts(f): reduce .[] as $x ([]; if any(.[]; f == ($x | f)) then . else . + [$x] end);
+        {kind: "lesson", path: $path,
+         cites: ([$r[] | select(.[0] == "C") | {cited: .[1], resolved: .[2]}] | firsts(.resolved)),
+         other: ([$r[] | select(.[0] == "O") | {cited: .[1], resolved: .[2]}] | firsts(.resolved)),
+         missing: ([$r[] | select(.[0] == "M") | .[1]] | firsts(.)),
+         cited_by: ($by | split("\n") | map(select(length > 0)) | unique),
+         taught_by: ($tb | split("\n") | map(select(length > 0) | split("\t") | {id: .[0], kind: .[1], state: .[2]})
+                     | unique_by(.id) | sort_by(.id | ltrimstr("W-") | tonumber))}')" \
+        || refuse "trace: could not assemble the trace for $self"
+    # replaces, related, and replaced by, resolved across the project's stores
+    # and its group's, read-only. Appended after every existing key.
+    rdirs=""
+    if in_repo; then
+        rerr="$(mktemp)" || refuse "trace: cannot create a temp file"
+        rdirs="$(cd "${top:-.}" && cmd_related_solutions_dirs 2>"$rerr")" \
+            || { cat "$rerr" >&2; rm -f "$rerr"; refuse "trace: could not list the related lesson directories"; }
+        rm -f "$rerr"
+    fi
+    links="$(lesson_links "$self" "$dirs" "$rdirs")" || refuse "trace: could not read the lessons $self links to"
+    # shellcheck disable=SC2016  # $-names are jq variables
+    out="$(printf '%s\n' "$links" | jq -Rnc --argjson base "$out" '
+        [inputs | select(length > 0) | split("\t")] as $r
+        | def names($k): [$r[] | select(.[0] == "N" and .[1] == $k) | .[2]]
+            | map(. as $n | {name: $n, resolved: [$r[] | select(.[0] == "R" and .[1] == $k and .[2] == $n)
+                                                    | {path: .[4], related_project: (.[3] == "rel")}]});
+        $base + {replaces: names("replaces"), related: names("related"),
+                 replaced_by: [$r[] | select(.[0] == "B") | {path: .[2], related_project: (.[1] == "rel")}]}')" \
+        || refuse "trace: could not assemble the trace for $self"
+    if [ "$json" -eq 1 ]; then printf '%s\n' "$out" | jq .; return 0; fi
+    printf '%s\n' "$out" | jq -r '
+        "lesson  \(.path)",
+        (.cites[] | "  cites  \(.resolved)"),
+        (.other[] | "  also cites  \(.resolved)"),
+        (.missing[] | "  MISSING: \(.)"),
+        (.cited_by[] | "  cited by  \(.)"),
+        (.taught_by[] | "  taught by  \(.id) (\(.state))"),
+        (["replaces", "related"][] as $k | .[$k][]
+            | if .resolved == [] then "  \($k)  MISSING: \(.name)"
+              else (.resolved[] | "  \($k)  " + (if .related_project then "related project: " else "" end) + .path) end),
+        (.replaced_by[] | "  replaced by  " + (if .related_project then "related project: " else "" end) + .path)'
+}
+
+# lessons_scan: one record per lesson under the directories solutions-dirs
+# prints, read from the project's top level so an in-tree lesson's path is
+# relative to it:
+#   <lesson path>\t<title>\t<paths>\t<replaces>\t<related>
+# Each list is comma-joined, and empty when its key is absent, `[]`, or not in
+# the one-line bracket form. <title> is the first `# ` heading after the
+# frontmatter. The reader is tolerant: a frontmatter line it does not need is
+# ignored, never an error. A field is kept only once the frontmatter closes,
+# and every field resets at the first line of each file, so an unterminated
+# frontmatter gives its own file no fields and never lends any to the next
+# file. One find and one awk for the whole store, however many lessons it
+# holds. A directory that does not exist holds no lessons; one that cannot be
+# read fails the scan.
+# shellcheck disable=SC2016  # awk program text
+LESSONS_SCAN_AWK='
+function flush() {
+    if (cur == "") return
+    printf "%s\t%s\t%s\t%s\t%s\n", cur, title, p, rp, rl
+    seen[cur] = 1
+}
+function list(v,   n, a, i, out, e) {
+    sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+    if (v !~ /^\[.*\]$/) return ""
+    n = split(substr(v, 2, length(v) - 2), a, ",")
+    out = ""
+    for (i = 1; i <= n; i++) {
+        e = a[i]; sub(/^[ \t]+/, "", e); sub(/[ \t]+$/, "", e)
+        if (e ~ /^".*"$/) e = substr(e, 2, length(e) - 2)
+        if (e != "") out = out (out == "" ? "" : ",") e
+    }
+    return out
+}
+{ sub(/\r$/, "") }
+FNR == 1 {
+    flush()
+    cur = FILENAME; title = ""; p = ""; rp = ""; rl = ""; tp = ""; trp = ""; trl = ""
+    if ($0 == "---") { state = "fm"; next }
+    state = "body"
+}
+state == "fm" {
+    if ($0 == "---") { state = "body"; p = tp; rp = trp; rl = trl }
+    else if ($0 ~ /^paths:/) tp = list(substr($0, 7))
+    else if ($0 ~ /^replaces:/) trp = list(substr($0, 10))
+    else if ($0 ~ /^related:/) trl = list(substr($0, 9))
+    next
+}
+title == "" && /^# / { title = substr($0, 3); gsub(/\t/, " ", title); sub(/[ \t]+$/, "", title) }
+END {
+    flush()
+    for (i = 1; i < ARGC; i++) if (!(ARGV[i] in seen)) printf "%s\t\t\t\t\n", ARGV[i]
+}'
+# lessons_scan [<dirs>]: <dirs> is solutions-dirs' output, newline-separated,
+# for a caller that already has it; with none, it is asked for here.
+lessons_scan() {
+    local dirs d list=""
+    if [ $# -gt 0 ]; then dirs="$1"; else dirs="$(cmd_solutions_dirs)" || return 1; fi
+    for d in $dirs; do
+        [ -n "$d" ] || continue
+        [ -e "$d" ] || continue
+        list="${list:+$list$'\n'}$d"
+    done
+    [ -n "$list" ] || return 0
+    # shellcheck disable=SC2086  # split on IFS (newlines): a dir may hold spaces
+    find $list -type f -name '*.md' -exec awk "$LESSONS_SCAN_AWK" {} +
+}
+
+# lessons_group_files <dir>: the readable lesson files under one group
+# member's directory, NUL-separated on stdout. Each file is tested with the
+# shell's [ -r ] rather than opened by a tool, so one file that cannot be read
+# is left out alone instead of failing a whole batch (awk stops at the first
+# input it cannot open and skips its END block, which drops every lesson in the
+# batch). When anything could not be listed or read, a warning goes to stderr.
+# lessons_scan_group and lessons_index both read the group through this, so the
+# two readers agree on which lessons exist. A caller that reads the group through
+# both sets LESSONS_GROUP_QUIET=1 on the index call so the warning prints once.
+lessons_group_files() {
+    local d="$1" st
+    find "$d" -type f -name '*.md' -print0 2>/dev/null | {
+        local f bad=0
+        while IFS= read -r -d '' f; do
+            if [ -r "$f" ]; then printf '%s\0' "$f"; else bad=1; fi
+        done
+        [ "$bad" -eq 0 ]
+    }
+    st=("${PIPESTATUS[@]}")
+    if [ -z "${LESSONS_GROUP_QUIET:-}" ] && { [ "${st[0]}" -ne 0 ] || [ "${st[1]}" -ne 0 ]; }; then
+        printf 'sidecar.sh: some lessons in the group directory %s could not be read\n' "$d" >&2
+    fi
+    return 0
+}
+
+# lessons_scan_group <dirs>: the lesson scan over the group's directories, best
+# effort: lessons that cannot be read in a member directory are left out with a
+# warning, and the readable ones stay, so one bad file or folder in another
+# project never turns off this project's lookups. lessons_index keeps the same
+# rule, through the same lessons_group_files.
+lessons_scan_group() {
+    local d f
+    local -a files
+    while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        [ -e "$d" ] || continue
+        files=()
+        while IFS= read -r -d '' f; do files[${#files[@]}]="$f"; done < <(lessons_group_files "$d")
+        # With no readable file, awk would read stdin: skip it.
+        [ "${#files[@]}" -gt 0 ] || continue
+        # xargs splits a very long list into batches, as find -exec {} + does
+        # for lessons_scan; the awk keeps no state across files, so each batch
+        # stands alone. Any awk failure makes xargs exit nonzero, so it still warns.
+        printf '%s\0' "${files[@]}" | xargs -0 awk "$LESSONS_SCAN_AWK" 2>/dev/null \
+            || printf 'sidecar.sh: some lessons in the group directory %s could not be read\n' "$d" >&2
+    done <<<"$1"
+    return 0
+}
+
+# lessons match: which lessons' `paths` name the given files. A pointer matches
+# a file it names exactly, or a folder above the file, on path-segment
+# boundaries only. Each lesson is printed once, at its best match: every exact
+# line first, then folder lines from the deepest matching folder up, ties in
+# lesson-path order. Matching runs in one awk over the scan, so the process
+# count does not grow with the number of lessons.
+# shellcheck disable=SC2016  # awk program text
+LESSONS_MATCH_AWK='
+function norm(s) { sub(/^(\.\/)+/, "", s); sub(/\/+$/, "", s); return s }
+# A file path with its "." and ".." segments collapsed, lexically.
+function canon(s,   n, a, i, k, st, out) {
+    n = split(s, a, "/"); k = 0
+    for (i = 1; i <= n; i++) {
+        if (a[i] == "" || a[i] == ".") continue
+        if (a[i] == ".." && k > 0 && st[k] != "..") { k--; continue }
+        st[++k] = a[i]
+    }
+    out = ""
+    for (i = 1; i <= k; i++) out = out (i > 1 ? "/" : "") st[i]
+    return out
+}
+FILENAME == ARGV[1] { if ($0 != "") q[++nq] = canon($0); next }
+# The second file is every scanned lesson, here and in the group: whatever its
+# replaces names is replaced by it. Derived on each run, never stored.
+# The third file is the open-flag summary: lesson name, entry, count. A flag
+# counts only while its entry is still in the lesson, checked below.
+FILENAME == ARGV[3] { fl[$1, $2] = $3; fn[$1] = fn[$1] SUBSEP $2; next }
+FILENAME == ARGV[2] {
+    if ($4 == "") next
+    b = $1; sub(/.*\//, "", b)
+    nr = split($4, rs, ",")
+    for (i = 1; i <= nr; i++) {
+        if (rs[i] == "" || ((rs[i], b) in had)) continue
+        had[rs[i], b] = 1
+        rb[rs[i]] = (rb[rs[i]] == "" ? b : rb[rs[i]] "," b)
+    }
+    next
+}
+{
+    scanned++
+    if ($3 == "") next
+    with++
+    np = split($3, ps, ",")
+    best = -1; be = ""
+    for (i = 1; i <= np; i++) {
+        e = norm(ps[i])
+        if (e == "") continue
+        depth = split(e, segs, "/")
+        for (j = 1; j <= nq; j++) {
+            if (q[j] == e) sc = 1000000
+            else if (index(q[j], e "/") == 1) sc = depth
+            else continue
+            if (sc > best) { best = sc; be = ps[i] }
+        }
+    }
+    if (best < 0) next
+    matched++
+    # With -v want=1 the row is the paths entry the lesson matched through, as
+    # lessons flag records it, so the rule for a hit lives in this program only.
+    if (want != "") { printf "E\t%s\n", be; next }
+    b = $1; sub(/.*\//, "", b)
+    extra = (b in rb) ? "\treplaced-by:" rb[b] : ""
+    if (b in fn) {
+        nf = 0
+        ne = split($3 "," $4 "," $5, es, ",")
+        for (i = 1; i <= ne; i++) if (es[i] != "" && ((b, es[i]) in fl) && !((b, es[i]) in cnt)) { cnt[b, es[i]] = 1; nf += fl[b, es[i]] }
+        for (k in cnt) delete cnt[k]
+        if (nf > 0) extra = extra "\tflags:" nf
+    }
+    if (best == 1000000) printf "0000000\texact\t%s\t%s%s\n", $1, $2, extra
+    else printf "1%06d\tfolder\t%s\t%s%s\n", 999999 - best, $1, $2, extra
+}
+END { printf "~\t%d\t%d\t%d\n", matched, scanned, with }'
+# lessons_record <sidecar> <branch> <phase> <outcome> <files> <scanned> <with>
+#   <project> <matched>: append one run-log line to
+# <sidecar>/lookups/<branch-slug>.jsonl and commit it. <files> and <matched>
+# are newline-separated. The new file is built beside the old one and renamed
+# over it, so an interrupted write leaves the old file whole; a trailing line
+# with no newline, left by any earlier writer, is dropped, so the file holds
+# only complete lines.
+lessons_record() {
+    local sc="$1" branch="$2" phase="$3" outcome="$4" asked="$5" scanned="$6" with="$7" project="$8" matched="$9"
+    local rel f tmp line
+    rel="lookups/$(branch_slug "$branch").jsonl"
+    f="$sc/$rel"
+    line="$(jq -cn --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg b "$branch" --arg p "$phase" \
+        --arg fs "$asked" --argjson s "$scanned" --argjson w "$with" --arg pj "$project" \
+        --arg m "$matched" --arg o "$outcome" \
+        '{at: $at, branch: $b, phase: $p,
+          files: ($fs | split("\n") | map(select(length > 0))),
+          scanned: $s, with_paths: $w, projects: [$pj],
+          matched: ($m | split("\n") | map(select(length > 0))), outcome: $o}')" || return 1
+    mkdir -p "$sc/lookups" || return 1
+    tmp="$(mktemp "$sc/lookups/.record.XXXXXX")" || return 1
+    if [ -s "$f" ]; then
+        if [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ]; then
+            cat "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
+        else
+            sed '$d' "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
+        fi
+    fi
+    printf '%s\n' "$line" >> "$tmp" || { rm -f "$tmp"; return 1; }
+    mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
+    commit_paths "$sc" "sidecar: lesson lookup $phase on $branch" "$rel" >/dev/null || return 1
+}
+
+# lessons_try_record <sidecar> <branch> <phase> <files> <project> <outcome>
+#   <scanned> <with> <matched>: record this lookup and print the receipt's
+# recorded value. Every input is an argument, so a caller that fails early
+# records with what it already knows.
+lessons_try_record() {
+    if [ -z "$1" ]; then
+        printf 'no: no sidecar resolves'
+    elif [ -z "$2" ]; then
+        printf 'no: HEAD is detached'
+    elif lessons_record "$1" "$2" "$3" "$6" "$4" "$7" "$8" "$5" "$9"; then
+        printf 'yes'
+    else
+        printf 'no: the run log could not be written'
+    fi
+}
+
+# lessons_fail <tmpd> <sidecar> <branch> <phase> <files> <project> <why>: the
+# failed outcome. Records it when a phase was given, then exits 1 with nothing
+# on stdout.
+lessons_fail() {
+    local note="" r
+    [ -z "$1" ] || rm -rf "$1"
+    if [ -n "$4" ]; then
+        r="$(lessons_try_record "$2" "$3" "$4" "$5" "$6" failed 0 0 "")"
+        case "$r" in
+            yes) note=" (recorded as failed)" ;;
+            *) note=" (not recorded: ${r#no: })" ;;
+        esac
+    fi
+    refuse "lessons match: $7; nothing was matched$note"
+}
+
+lessons_match() {
+    local top prefix arg q="" name dirs rdirs scan tmpd="" line key lpath m=0 s=0 w=0 rows=""
+    local phase="" sc="" branch="" recorded="no" outcome names=""
+    in_repo || refuse "lessons match: not inside a git repository"
+    top="$(pgit rev-parse --show-toplevel)" || refuse "lessons match: cannot find the project's top level"
+    prefix="$(pgit rev-parse --show-prefix)" || refuse "lessons match: cannot find the project's top level"
+    while [ $# -gt 0 ]; do
+        arg="$1"; shift
+        case "$arg" in
+            --record)
+                [ $# -ge 1 ] || die_usage "lessons match: --record needs start or changed"
+                case "$1" in start|changed) phase="$1" ;; *) die_usage "lessons match: --record takes start or changed, not: $1" ;; esac
+                shift; continue ;;
+            --*) die_usage "lessons match: unknown argument: $arg" ;;
+            *$'\n'*) die_usage "lessons match: an argument holds a newline; pass one path per argument" ;;
+        esac
+        # A Context anchor names a line or a range after the path; strip it the
+        # way require does.
+        arg="$(strip_line_anchor "$arg")"
+        case "$arg" in
+            "$top") arg="" ;;
+            "$top"/*) arg="${arg#"$top"/}" ;;
+            /*) refuse "lessons match: $arg is outside the project at $top" ;;
+            *) arg="$prefix$arg" ;;
+        esac
+        [ -n "$arg" ] || continue
+        q="${q:+$q$'\n'}$arg"
+    done
+    cd "$top" || refuse "lessons match: cannot enter $top"
+    # The sidecar and the project's name are found before any step that can
+    # fail, so every failure after this point is recorded where it can be. The
+    # project read is the sidecar's name, else the main checkout's directory
+    # name, which every worktree shares.
+    sc="$(do_resolve 2>/dev/null)" || sc=""
+    if [ -n "$sc" ]; then name="${sc##*/}"
+    else name="$(main_checkout)" || name="$top"; name="${name##*/}"
+    fi
+    [ -z "$phase" ] || branch="$(pgit symbolic-ref --short -q HEAD)" || branch=""
+    tmpd="$(mktemp -d)" || lessons_fail "" "$sc" "$branch" "$phase" "$q" "$name" "cannot create a temp directory"
+    scan="$tmpd/scan"
+    dirs="$(cmd_solutions_dirs)" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not list the lesson directories"
+    lessons_scan "$dirs" > "$scan" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the lesson headers"
+    # The group's lessons are read for their replaces only: their paths name
+    # files in another checkout, so they are never matched here.
+    rdirs="$(cmd_related_solutions_dirs)" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not list the group's lesson directories"
+    lessons_scan_group "$rdirs" > "$tmpd/rscan" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not write the group's lesson headers"
+    cat "$tmpd/rscan" "$scan" > "$tmpd/reps" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the lesson headers"
+    printf '%s\n' "$q" > "$tmpd/q"
+    # Each step is checked on its own: a pipeline reports only its last
+    # command's status, and a matcher that failed must never print as a
+    # lookup that found nothing.
+    lessons_flag_summary "$sc" > "$tmpd/flags" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the lesson flags"
+    awk -F '\t' "$LESSONS_MATCH_AWK" "$tmpd/q" "$tmpd/reps" "$tmpd/flags" "$scan" > "$tmpd/raw" \
+        || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not match the lesson headers"
+    LC_ALL=C sort "$tmpd/raw" > "$tmpd/rows" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not sort the matches"
+    # A row is "<sort key><TAB><the match line>"; the receipt's key is "~".
+    # Fields are cut by hand, because read would merge an empty title's tabs.
+    key=""
+    while IFS= read -r line; do
+        key="${line%%$'\t'*}"
+        line="${line#*$'\t'}"
+        if [ "$key" = "~" ]; then
+            m="${line%%$'\t'*}"; line="${line#*$'\t'}"
+            s="${line%%$'\t'*}"; w="${line#*$'\t'}"
+            break
+        fi
+        rows="$rows$line"$'\n'
+        lpath="${line#*$'\t'}"; lpath="${lpath%%$'\t'*}"
+        names="$names${lpath##*/}"$'\n'
+    done < "$tmpd/rows"
+    [ "$key" = "~" ] || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "the matcher printed no receipt"
+    rm -rf "$tmpd"
+    if [ -z "$q" ]; then outcome=no-files
+    elif [ -z "$rows" ]; then outcome=none
+    else outcome=matched
+    fi
+    [ -z "$phase" ] || recorded="$(lessons_try_record "$sc" "$branch" "$phase" "$q" "$name" "$outcome" "$s" "$w" "$names")"
+    case "$outcome" in
+        no-files) printf 'no file list given; nothing to match\n' ;;
+        none) printf 'no lesson points at these files\n' ;;
+        *) printf '%s' "$rows" ;;
+    esac
+    printf 'lessons: %s matched, %s scanned, %s with paths, projects: %s, recorded: %s\n' "$m" "$s" "$w" "$name" "$recorded"
+}
+
+# lessons_index <own dirs> <group dirs>: one line per lesson file, "own<TAB>
+# <path>" for the project's stores and "rel<TAB><path>" for the group's, from
+# one find per directory, each directory's lines in path order. A directory that does not exist holds no lessons; an
+# own one that cannot be read fails the index, a group member's keeps the
+# lessons it could read and warns.
+lessons_index() {
+    local d tag l f rc=0
+    for tag in own rel; do
+        if [ "$tag" = own ]; then set -- "$1" "$2" "$1"; else set -- "$1" "$2" "$2"; fi
+        for d in $3; do
+            [ -n "$d" ] || continue
+            [ -e "$d" ] || continue
+            if [ "$tag" = own ]; then
+                l="$(find "$d" -type f -name '*.md' -exec printf "$tag"'\t%s\n' {} +)" || rc=1
+            else
+                l="$(while IFS= read -r -d '' f; do printf 'rel\t%s\n' "$f"; done < <(lessons_group_files "$d"))"
+            fi
+            [ -z "$l" ] || printf '%s\n' "$l" | LC_ALL=C sort
+        done
+    done
+    return "$rc"
+}
+
+# lessons_resolve_name <lesson file name> <index>: one line per lesson file
+# with that base name in the index lessons_index printed, a group member's
+# prefixed "related project: ". No line means no lesson has the name. Links
+# are names, never paths, so a name holding "/" resolves to nothing.
+lessons_resolve_name() {
+    local want="$1" idx="$2" tag path
+    case "$want" in ''|*/*) return 0 ;; esac
+    while IFS=$'\t' read -r tag path; do
+        [ "${path##*/}" = "$want" ] || continue
+        if [ "$tag" = rel ]; then printf 'related project: %s\n' "$path"; else printf '%s\n' "$path"; fi
+    done <<<"$idx"
+}
+
+# lessons check: loose ends, read-only. The reader below is lessons_scan's,
+# kept apart because it reports the forms the scan silently treats as empty.
+# Per lesson it prints "X<TAB><lesson><TAB><kind><TAB><detail>" for a loose
+# end it can see alone (no-paths, bad-list), then "P<TAB><lesson><TAB><entry>"
+# per well-formed paths entry and "L<TAB><lesson><TAB><key><TAB><name>" per
+# well-formed replaces or related name, which the shell checks against the
+# tree and the stores, then "F<TAB><lesson>", on which the shell checks the
+# work items. Entries are
+# split on commas outside double quotes, so a quoted entry holding a comma is
+# seen and reported. Fields reset at each file and are kept only once the
+# frontmatter closes, as in the scan.
+# shellcheck disable=SC2016  # awk program text
+LESSONS_CHECK_AWK='
+function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+function flush(   i) {
+    if (cur == "") return
+    if (!closed) { hp = 0; nb = 0; ne = 0 }
+    if (!hp) printf "X\t%s\tno-paths\tno paths key\n", cur
+    else if (np == 0 && !pbad) printf "X\t%s\tno-paths\tpaths is empty\n", cur
+    for (i = 1; i <= nb; i++) printf "X\t%s\tbad-list\t%s\n", cur, bad[i]
+    for (i = 1; i <= ne; i++) print ent[i]
+    printf "F\t%s\n", cur
+    seen[cur] = 1
+}
+function badl(key, why) { bad[++nb] = key ": " why; if (key == "paths") pbad = 1 }
+function add(key, e) {
+    e = trim(e)
+    if (e ~ /^".*"$/) e = substr(e, 2, length(e) - 2)
+    if (e == "") return
+    if (e ~ /[,\[\]" \t]/) { badl(key, "an entry holds a comma, space, or bracket: " e); return }
+    if (key == "paths") { np++; ent[++ne] = "P\t" cur "\t" e }
+    else ent[++ne] = "L\t" cur "\t" key "\t" e
+}
+function parse(key, v,   inner, i, c, inq, e, n) {
+    v = trim(v)
+    if (v !~ /^\[.*\]$/) { badl(key, "not a one-line bracket list"); return }
+    inner = substr(v, 2, length(v) - 2); n = length(inner); e = ""; inq = 0
+    for (i = 1; i <= n; i++) {
+        c = substr(inner, i, 1)
+        if (c == "\"") inq = !inq
+        if (c == "," && !inq) { add(key, e); e = ""; continue }
+        e = e c
+    }
+    if (inq) { badl(key, "an unclosed quote"); return }
+    add(key, e)
+}
+{ sub(/\r$/, "") }
+FNR == 1 {
+    flush()
+    cur = FILENAME; closed = 0; hp = 0; np = 0; pbad = 0; nb = 0; ne = 0
+    if ($0 == "---") { state = "fm"; next }
+    state = "body"; closed = 1
+}
+state == "fm" {
+    if ($0 == "---") { state = "body"; closed = 1 }
+    else if ($0 ~ /^paths:/) { hp = 1; parse("paths", substr($0, 7)) }
+    else if ($0 ~ /^replaces:/) parse("replaces", substr($0, 10))
+    else if ($0 ~ /^related:/) parse("related", substr($0, 9))
+    next
+}
+END {
+    flush()
+    for (i = 1; i < ARGC; i++) if (!(ARGV[i] in seen)) { printf "X\t%s\tno-paths\tno paths key\n", ARGV[i]; printf "F\t%s\n", ARGV[i] }
+}'
+
+# lessons_check_entry <top> <entry>: whether a paths entry names something in
+# the project tree; prints the dead-path detail and returns 1 when it does not.
+lessons_check_entry() {
+    local e="$2"
+    while :; do case "$e" in ./*) e="${e#./}" ;; *) break ;; esac; done
+    while :; do case "$e" in */) e="${e%/}" ;; *) break ;; esac; done
+    case "/$e/" in
+        //*|*/../*) printf '%s (outside the project tree)' "$2"; return 1 ;;
+    esac
+    [ -e "$1/$e" ] && return 0
+    printf '%s' "$2"
+    return 1
+}
+
+# lessons_listed <top>: one line per lesson a work item lists, as the physical
+# absolute path it resolves to and as the stored form, for unlisted.
+lessons_listed() {
+    local wsc wf wl e r
+    wsc="$(do_resolve 2>/dev/null)" || return 0
+    [ -d "$wsc/work" ] || return 0
+    for wf in "$wsc"/work/W-*.md; do
+        [ -f "$wf" ] || continue
+        wl="$(work_jq -Rsr "$WORK_JQ"'parse_work | (.fm.lessons // [])[]' "$wf" 2>/dev/null)" || continue
+        while IFS= read -r e; do
+            [ -n "$e" ] || continue
+            printf '%s\n' "$e"
+            r="$(lesson_resolve "$e")"
+            [ -z "$r" ] || printf '%s\n' "$r"
+        done <<<"$wl"
+    done
+}
+
+# shellcheck disable=SC2120  # its argument comes through cmd_lessons' "lessons_$sub" dispatch
+lessons_check() {
+    local top file="" dirs="" d list="" raw t a b c det bk listed="" n=0 out="" abs idx hits rdirs
+    [ $# -le 1 ] || die_usage "usage: sidecar.sh lessons check [<lesson-file>]"
+    in_repo || refuse "lessons check: not inside a git repository"
+    top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || refuse "lessons check: cannot find the project's top level"
+    if [ $# -eq 1 ]; then
+        [ -f "$1" ] || refuse "lessons check: no such lesson file: $1"
+        file="$(abs_path "$1")"
+        case "$file" in "$top"/*) file="${file#"$top"/}" ;; esac
+    fi
+    cd "$top" || refuse "lessons check: cannot enter $top"
+    if [ -n "$file" ]; then
+        raw="$(awk "$LESSONS_CHECK_AWK" "$file")" || refuse "lessons check: could not read $file"
+    else
+        dirs="$(cmd_solutions_dirs)" || refuse "lessons check: could not list the lesson directories"
+        for d in $dirs; do
+            [ -n "$d" ] || continue
+            [ -e "$d" ] || continue
+            list="${list:+$list$'\n'}$d"
+        done
+        if [ -n "$list" ]; then
+            # shellcheck disable=SC2086  # split on IFS (newlines): a dir may hold spaces
+            raw="$(find $list -type f -name '*.md' -exec awk "$LESSONS_CHECK_AWK" {} +)" \
+                || refuse "lessons check: could not read the lesson headers"
+        fi
+    fi
+    # Each listing is read on its own line so its refusal is not lost in
+    # argument position; a single-file check has no dirs yet.
+    [ -n "$dirs" ] || dirs="$(cmd_solutions_dirs)" || refuse "lessons check: could not list the lesson directories"
+    rdirs="$(cmd_related_solutions_dirs)" || refuse "lessons check: could not list the related lesson directories"
+    idx="$(lessons_index "$dirs" "$rdirs")" \
+        || refuse "lessons check: could not list the lessons a link may name"
+    bk="$(cmd_backend slices 2>/dev/null)" || bk=failed
+    [ "$bk" != sidecar ] || listed="$(lessons_listed "$top")"
+    while IFS=$'\t' read -r t a b c; do
+        case "$t" in
+            X) out="$out$b"$'\t'"$a"$'\t'"$c"$'\n'; n=$((n + 1)) ;;
+            P) if ! det="$(lessons_check_entry "$top" "$b")"; then
+                   out="${out}dead-path"$'\t'"$a"$'\t'"$det"$'\n'; n=$((n + 1))
+               fi ;;
+            L) hits="$(lessons_resolve_name "$c" "$idx")"
+               if [ -z "$hits" ]; then
+                   out="${out}dead-link"$'\t'"$a"$'\t'"$b: $c"$'\n'; n=$((n + 1))
+               elif [ "$(printf '%s\n' "$hits" | wc -l | tr -d ' ')" -gt 1 ]; then
+                   out="${out}ambiguous-link"$'\t'"$a"$'\t'"$b: $c ($(printf '%s\n' "$hits" | wc -l | tr -d ' ') files)"$'\n'; n=$((n + 1))
+               fi ;;
+            F) [ "$bk" = sidecar ] || continue
+               case "$a" in /*) abs="$(abs_path "$a")" ;; *) abs="$top/$a" ;; esac
+               case $'\n'"$listed"$'\n' in
+                   *$'\n'"$abs"$'\n'*|*$'\n'"$a"$'\n'*) ;;
+                   *) out="${out}unlisted"$'\t'"$a"$'\t'"no work item lists it"$'\n'; n=$((n + 1)) ;;
+               esac ;;
+        esac
+    done <<<"$raw"
+    # Grouped by lesson, in path order; within a lesson the reader's order holds.
+    [ -z "$out" ] || printf '%s' "$out" | LC_ALL=C sort -s -t "$(printf '\t')" -k2,2
+    case "$bk" in
+        sidecar) ;;
+        github) printf 'unlisted: n/a\n' ;;
+        *) printf 'unlisted: not checked: sidecar.sh backend slices failed\n' ;;
+    esac
+    printf 'loose ends: %s\n' "$n"
+}
+
+# lessons audit: whether recall is working, read-only. Sections in order:
+# self-check, coverage, group, loose ends, runs, flags. Each line starts with its
+# label. --branch prints only that branch's runs line, which /pre-merge shows.
+# The run classes come from the run log's phase and outcome: a phase counts
+# when its outcome is not failed, and a branch whose every record failed is
+# failed.
+# shellcheck disable=SC2016  # jq program text
+LESSONS_RUNS_JQ='
+[inputs | fromjson? | objects | select(.branch | type == "string")]
+| group_by(.branch)[]
+| . as $g
+| [$g[] | select(.outcome != "failed") | .phase] as $ok
+| "runs: \($g[0].branch) "
+  + (if ($ok | index("start")) and ($ok | index("changed")) then "both"
+     elif ($ok | index("start")) then "start-only"
+     elif ($ok | index("changed")) then "changed-only"
+     else "failed" end)'
+
+# lessons_audit_runs <sidecar> [<branch>]: the runs lines, for every branch
+# with a log file or for one.
+lessons_audit_runs() {
+    local sc="$1" f files=() line
+    if [ $# -ge 2 ]; then
+        f="$sc/lookups/$(branch_slug "$2").jsonl"
+        line=""
+        [ -f "$f" ] && line="$(jq -Rrn --arg b "$2" "$LESSONS_RUNS_JQ"' | select(startswith("runs: \($b) "))' "$f")"
+        if [ -n "$line" ]; then printf '%s\n' "$line"; else printf 'no lesson lookup recorded for this branch\n'; fi
+        return 0
+    fi
+    for f in "$sc"/lookups/*.jsonl; do [ -f "$f" ] && files+=("$f"); done
+    if [ "${#files[@]}" -eq 0 ]; then printf 'runs: none recorded\n'; return 0; fi
+    jq -Rrn "$LESSONS_RUNS_JQ" "${files[@]}" | LC_ALL=C sort
+}
+
+# lessons_group_line <id> <name> <state>: one group line, once per id. It reads
+# and extends lessons_audit_group's seen, through bash's dynamic scope.
+lessons_group_line() {
+    case "$seen" in *$'\n'"$1"$'\n'*) return 0 ;; esac
+    seen="$seen$1"$'\n'
+    printf 'group: %s %s\n' "$2" "$3"
+}
+
+# lessons_readable <sidecar dir>: its sidecar.json and solutions/ can be read.
+lessons_readable() {
+    [ -r "$1/sidecar.json" ] || return 1
+    [ ! -e "$1/solutions" ] || { [ -r "$1/solutions" ] && [ -x "$1/solutions" ]; }
+}
+
+# lessons_audit_group <sidecar>: one line per member of the project's
+# solutions.system group and per solutions.related key, "readable" when its
+# sidecar.json and its solutions/ can be read. A sidecar whose sidecar.json
+# cannot be read may be a member, so with a group label it is listed as
+# unreadable; a related key that matches no sidecar is unreadable too.
+lessons_audit_group() {
+    local sc="$1" own rel d f label key hit rc seen=$'\n'
+    own="$(jq -r '.solutions.system // "" | strings' "$sc/sidecar.json" 2>/dev/null)" || own=""
+    rel="$(jq -r '.solutions.related // [] | .[]? | strings' "$sc/sidecar.json" 2>/dev/null)" || rel=""
+    if [ -n "$own" ]; then
+        for d in "$SIDECAR_ROOT"/*; do
+            # A dangling symlink is not a directory, and could be a member: unreadable.
+            if [ -L "$d" ] && [ ! -e "$d" ]; then
+                lessons_group_line "$d" "${d##*/}" unreadable
+                continue
+            fi
+            [ -d "$d" ] || continue
+            [ "$d" != "$sc" ] || continue
+            f="$d/sidecar.json"
+            if [ ! -x "$d" ] || { [ -e "$f" ] && ! label="$(jq -r '.solutions.system // "" | strings' "$f" 2>/dev/null)"; }; then
+                lessons_group_line "$d" "${d##*/}" unreadable
+                continue
+            fi
+            [ -f "$f" ] || continue
+            [ "$label" = "$own" ] || continue
+            if lessons_readable "$d"; then lessons_group_line "$d" "${d##*/}" readable
+            else lessons_group_line "$d" "${d##*/}" unreadable; fi
+        done
+    fi
+    while IFS= read -r key; do
+        [ -n "$key" ] || continue
+        rc=0
+        hit="$(owners_of "$key" 2>/dev/null)" || rc=$?
+        hit="${hit%%$'\n'*}"
+        if [ "$rc" -ne 0 ] || [ -z "$hit" ]; then lessons_group_line "key:$key" "$key" unreadable; continue; fi
+        [ "$hit" != "$sc" ] || continue
+        if lessons_readable "$hit"; then lessons_group_line "$hit" "${hit##*/}" readable
+        else lessons_group_line "$hit" "${hit##*/}" unreadable; fi
+    done <<<"$rel"
+}
+
+# lessons_audit_flags <sidecar> <own dirs>: one line per lesson with an open
+# flag, "flags: <name> returned <r> flagged <f> latest: <reason>", in name
+# order. <r> counts the run-log records whose matched names the lesson; <f> the
+# open flags, whose entries are checked against the lesson as it is now, here
+# or in the group.
+lessons_audit_flags() {
+    local sc="$1" own="$2" sum all rdirs files=() f ret lname entry cnt fat reason es
+    sum="$(lessons_flag_summary "$sc")" || return 1
+    [ -n "$sum" ] || return 0
+    all="$(lessons_scan "$own")" || return 1
+    # A refused listing of the group's directories returns 1 here, so the
+    # caller prints "flags: could-not-run"; the listing's own refusal
+    # message is already on stderr.
+    rdirs="$(cmd_related_solutions_dirs)" || return 1
+    all="$all"$'\n'"$(lessons_scan_group "$rdirs")"
+    for f in "$sc"/lookups/*.jsonl; do [ -f "$f" ] && files+=("$f"); done
+    ret=""
+    if [ "${#files[@]}" -gt 0 ]; then
+        ret="$(jq -Rrn '[inputs | fromjson? | objects | .matched[]? | strings] | group_by(.)[] | "\(.[0])\t\(length)"' "${files[@]}")" || return 1
+    fi
+    while IFS=$'\t' read -r lname entry cnt fat reason; do
+        [ -n "$lname" ] || continue
+        # The lesson's entries now: every file with that name, all three lists.
+        es="$(printf '%s\n' "$all" | awk -F '\t' -v n="$lname" '{ b = $1; sub(/.*\//, "", b) } b == n { printf ",%s,%s,%s,", $3, $4, $5 }')"
+        case "$es" in *",$entry,"*) printf '%s\t%s\t%s\t%s\n' "$lname" "$cnt" "$fat" "$reason" ;; esac
+    done <<<"$sum" | LC_ALL=C sort -t "$(printf '\t')" -k1,1 -k3,3 \
+    | awk -F '\t' -v ret="$ret" '
+        BEGIN { n = split(ret, rl, "\n"); for (i = 1; i <= n; i++) { split(rl[i], p, "\t"); r[p[1]] = p[2] } }
+        $1 != cur { if (cur != "") out(); cur = $1; f = 0 }
+        { f += $2; latest = $4 }
+        function out() { printf "flags: %s returned %d flagged %d latest: %s\n", cur, r[cur] + 0, f, latest }
+        END { if (cur != "") out() }'
+}
+
+lessons_audit() {
+    local branch="" has_branch=0 top sc dirs scan lesson entry res rc s=0 p=0 l pth fld3
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --branch) [ $# -ge 2 ] || die_usage "lessons audit: --branch needs a name"
+                      branch="$2"; has_branch=1; shift 2 ;;
+            *) die_usage "usage: sidecar.sh lessons audit [--branch <name>]" ;;
+        esac
+    done
+    [ "$has_branch" -eq 0 ] || [ -n "$branch" ] || die_usage "lessons audit: --branch needs a name"
+    in_repo || refuse "lessons audit: not inside a git repository"
+    top="$(pgit rev-parse --show-toplevel)" || refuse "lessons audit: cannot find the project's top level"
+    cd "$top" || refuse "lessons audit: cannot enter $top"
+    sc="$(do_resolve 2>/dev/null)" || sc=""
+    if [ "$has_branch" -eq 1 ]; then
+        if [ -z "$sc" ]; then printf 'lookups are not recorded: no sidecar\n'; return 0; fi
+        lessons_audit_runs "$sc" "$branch"
+        return 0
+    fi
+    dirs="$(cmd_solutions_dirs)" || refuse "lessons audit: could not list the lesson directories"
+    scan="$(lessons_scan "$dirs")" || refuse "lessons audit: could not read the lesson headers"
+    lesson="" entry=""
+    while IFS= read -r l; do
+        [ -n "$l" ] || continue
+        s=$((s + 1))
+        pth="${l%%$'\t'*}"
+        fld3="${l#*$'\t'}"; fld3="${fld3#*$'\t'}"; fld3="${fld3%%$'\t'*}"
+        [ -n "$fld3" ] || continue
+        p=$((p + 1))
+        if [ -z "$lesson" ]; then lesson="$pth"; entry="${fld3%%,*}"; fi
+    done <<<"$(printf '%s\n' "$scan" | LC_ALL=C sort)"
+    # The self-check runs the real matcher on a real lesson's first entry and
+    # passes only when that lesson comes back; with nothing to compare it
+    # says it could not run.
+    if [ -z "$lesson" ]; then
+        printf 'self-check: could-not-run: no lesson carries paths\n'
+    else
+        rc=0
+        res="$( (lessons_match "$entry") 2>/dev/null)" || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            printf 'self-check: FAIL: lessons match %s exited %s\n' "$entry" "$rc"
+        elif printf '%s\n' "$res" | awk -F '\t' -v want="$lesson" '$2 == want { f = 1 } END { exit !f }'; then
+            printf 'self-check: pass\n'
+        else
+            printf 'self-check: FAIL: lessons match %s did not return %s\n' "$entry" "$lesson"
+        fi
+    fi
+    printf 'coverage: %s of %s lessons carry paths\n' "$p" "$s"
+    [ -z "$sc" ] || lessons_audit_group "$sc"
+    # shellcheck disable=SC2119  # the whole store: no lesson file is passed
+    l="$( (lessons_check) 2>/dev/null | tail -n 1)"
+    case "$l" in "loose ends: "*) printf '%s\n' "$l" ;; *) printf 'loose ends: could-not-run\n' ;; esac
+    if [ -z "$sc" ]; then printf 'runs: lookups are not recorded: no sidecar\n'
+    else
+        lessons_audit_runs "$sc"
+        lessons_audit_flags "$sc" "$dirs" || printf 'flags: could-not-run: the flags or the lessons could not be read\n'
+    fi
+}
+
+# lesson flags. <sidecar>/lesson-flags.jsonl holds one line per flag,
+# {at, branch, lesson, entry, for, reason}, and per keep, {at, lesson, entry,
+# settled: "kept"}. A flag is open while its entry is still in the lesson's
+# paths, replaces, or related, and no later keep line names the same lesson and
+# entry. A flag never edits a lesson and never stops it from being returned.
+#
+# LESSONS_FLAGS_JQ reads the flags file and prints, per lesson and entry with
+# flags after its last keep, "<lesson><TAB><entry><TAB><count><TAB><latest at>
+# <TAB><latest reason>". Whether the entry is still in the lesson is the
+# caller's check, against the lesson as it is now.
+# shellcheck disable=SC2016  # jq program text
+LESSONS_FLAGS_JQ='
+[inputs | fromjson? | objects | select((.lesson | type == "string") and (.entry | type == "string"))]
+| to_entries | group_by([.value.lesson, .value.entry])[]
+| . as $g
+| ([$g[] | select(.value.settled == "kept") | .key] | max // -1) as $k
+| [$g[] | select(.key > $k and (.value.settled == null))] as $open
+| select($open | length > 0)
+| [$g[0].value.lesson, $g[0].value.entry, ($open | length | tostring),
+   ($open[-1].value.at // "" | tostring),
+   ($open[-1].value.reason // "" | tostring | gsub("[\t\n\r]"; " "))]
+| join("\t")'
+
+# lessons_flag_summary <sidecar>: LESSONS_FLAGS_JQ over the flags file, or
+# nothing when there is no sidecar or no file.
+lessons_flag_summary() {
+    [ -n "$1" ] && [ -f "$1/lesson-flags.jsonl" ] || return 0
+    jq -Rrn "$LESSONS_FLAGS_JQ" "$1/lesson-flags.jsonl"
+}
+
+# lessons_flag_append <sidecar> <json line> <msg>: append one complete line to
+# the flags file and commit it, the way lessons_record writes the run log.
+lessons_flag_append() {
+    local sc="$1" line="$2" f tmp
+    f="$sc/lesson-flags.jsonl"
+    tmp="$(mktemp "$sc/.lesson-flags.XXXXXX")" || return 1
+    if [ -s "$f" ]; then
+        if [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ]; then
+            cat "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
+        else
+            sed '$d' "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
+        fi
+    fi
+    printf '%s\n' "$line" >> "$tmp" || { rm -f "$tmp"; return 1; }
+    mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
+    commit_paths "$sc" "$3" lesson-flags.jsonl >/dev/null
+}
+
+lessons_flag() {
+    local file="" for="" reason="" keep="" has_reason=0 has_keep=0 top prefix sc name rec tmpd entry="" at branch line
+    [ $# -ge 1 ] || die_usage "usage: sidecar.sh lessons flag <lesson-file> (--for <path> --reason <text> | --keep <entry>)"
+    file="$1"; shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --for) [ $# -ge 2 ] || die_usage "lessons flag: --for needs a path"; for="$2"; shift 2 ;;
+            --reason) [ $# -ge 2 ] || die_usage "lessons flag: --reason needs a text"; reason="$2"; has_reason=1; shift 2 ;;
+            --keep) [ $# -ge 2 ] || die_usage "lessons flag: --keep needs an entry"; keep="$2"; has_keep=1; shift 2 ;;
+            *) die_usage "lessons flag: unknown argument: $1" ;;
+        esac
+    done
+    if [ "$has_keep" -eq 1 ]; then
+        if ! { [ -z "$for" ] && [ "$has_reason" -eq 0 ]; }; then die_usage "lessons flag: --keep takes no --for or --reason"; fi
+        [ -n "$keep" ] || die_usage "lessons flag: --keep needs an entry"
+    else
+        if ! { [ -n "$for" ] && [ "$has_reason" -eq 1 ] && [ -n "$reason" ]; }; then
+            die_usage "usage: sidecar.sh lessons flag <lesson-file> (--for <path> --reason <text> | --keep <entry>)"
+        fi
+    fi
+    [ -f "$file" ] || refuse "lessons flag: no such lesson file: $file"
+    in_repo || refuse "lessons flag: not inside a git repository"
+    sc="$(do_resolve 2>/dev/null)" \
+        || refuse "lessons flag: no sidecar resolves, so there is nowhere to record a flag; to narrow or remove the link, edit $file by hand"
+    name="${file##*/}"
+    at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if [ "$has_keep" -eq 1 ]; then
+        line="$(jq -cn --arg at "$at" --arg l "$name" --arg e "$keep" '{at: $at, lesson: $l, entry: $e, settled: "kept"}')" \
+            || refuse "lessons flag: could not build the keep line"
+        lessons_flag_append "$sc" "$line" "sidecar: lesson flag kept on $name" || refuse "lessons flag: could not write $sc/lesson-flags.jsonl"
+        printf 'kept: %s %s\n' "$name" "$keep"
+        return 0
+    fi
+    # The entry is the paths entry through which the lesson matches the path:
+    # an exact entry first, else the deepest folder above it, as lessons match
+    # ranks them.
+    top="$(pgit rev-parse --show-toplevel)" || refuse "lessons flag: cannot find the project's top level"
+    prefix="$(pgit rev-parse --show-prefix)" || refuse "lessons flag: cannot find the project's top level"
+    for="$(strip_line_anchor "$for")"
+    case "$for" in
+        "$top"/*) for="${for#"$top"/}" ;;
+        /*) refuse "lessons flag: $for is outside the project at $top" ;;
+        *) for="$prefix$for" ;;
+    esac
+    while :; do case "$for" in ./*) for="${for#./}" ;; *) break ;; esac; done
+    rec="$(awk "$LESSONS_SCAN_AWK" "$file")" || refuse "lessons flag: could not read $file"
+    tmpd="$(mktemp -d)" || refuse "lessons flag: cannot create a temp directory"
+    printf '%s\n' "$for" > "$tmpd/q"
+    printf '%s\n' "$rec" > "$tmpd/rec"
+    : > "$tmpd/none"
+    entry="$(awk -F '\t' -v want=1 "$LESSONS_MATCH_AWK" "$tmpd/q" "$tmpd/none" "$tmpd/none" "$tmpd/rec")" \
+        || { rm -rf "$tmpd"; refuse "lessons flag: could not match $file"; }
+    rm -rf "$tmpd"
+    entry="$(printf '%s\n' "$entry" | sed -n 's/^E\t//p' | head -n 1)"
+    [ -n "$entry" ] || refuse "lessons flag: no paths entry in $file matches $for, so it was not returned for it"
+    branch="$(pgit symbolic-ref --short -q HEAD)" || branch=""
+    line="$(jq -cn --arg at "$at" --arg b "$branch" --arg l "$name" --arg e "$entry" --arg f "$for" --arg r "$reason" \
+        '{at: $at, branch: $b, lesson: $l, entry: $e, for: $f, reason: $r}')" || refuse "lessons flag: could not build the flag line"
+    lessons_flag_append "$sc" "$line" "sidecar: lesson flag on $name" || refuse "lessons flag: could not write $sc/lesson-flags.jsonl"
+    printf 'flagged: %s %s for %s\n' "$name" "$entry" "$for"
+}
+
+# lessons propose <lesson-file>: the paths and related lines /compound's
+# guided pass shows for a lesson saved before paths existed, read-only. paths
+# holds each components entry that names an existing file or folder in the
+# project tree, in order, once, without a leading ./ or a trailing /; an entry with a wildcard, comma, space,
+# bracket, or quote, or one outside the tree, is left out. related holds each
+# .md name lesson_cites extracts from "## Related" and "Sibling docs:" that
+# resolves to a lesson here or in the group, as a file name, once. It never
+# proposes replaces: only a person can say one lesson took another's place.
+lessons_propose() {
+    local file top raw dirs="" d self comps e n out="" seen=$'\n' idx lines kind tok res b rel="" rseen=$'\n' rdirs
+    [ $# -eq 1 ] || die_usage "usage: sidecar.sh lessons propose <lesson-file>"
+    file="$1"
+    [ -f "$file" ] || refuse "lessons propose: no such lesson file: $file"
+    in_repo || refuse "lessons propose: not inside a git repository"
+    self="$(abs_path "$file")"
+    top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || refuse "lessons propose: cannot find the project's top level"
+    cd "$top" || refuse "lessons propose: cannot enter $top"
+    comps="$(awk '
+        { sub(/\r$/, "") }
+        NR == 1 && $0 != "---" { exit }
+        NR > 1 && $0 == "---" { exit }
+        /^components:/ { v = substr($0, 12); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+                         if (v ~ /^\[.*\]$/) print substr(v, 2, length(v) - 2); exit }' "$self")" \
+        || refuse "lessons propose: could not read $file"
+    while IFS= read -r e; do
+        e="${e#"${e%%[![:space:]]*}"}"; e="${e%"${e##*[![:space:]]}"}"
+        case "$e" in \"*\") e="${e#\"}"; e="${e%\"}" ;; esac
+        [ -n "$e" ] || continue
+        case "$e" in *[\*\?\[\]\"\ ,]*|/*) continue ;; esac
+        while :; do case "$e" in ./*) e="${e#./}" ;; */) e="${e%/}" ;; *) break ;; esac; done
+        [ -n "$e" ] || continue
+        lessons_check_entry "$top" "$e" >/dev/null || continue
+        case "$seen" in *$'\n'"$e"$'\n'*) continue ;; esac
+        seen="$seen$e"$'\n'
+        out="${out:+$out, }$e"
+    done <<<"$(printf '%s' "$comps" | tr ',' '\n')"
+    raw="$(cmd_solutions_dirs)" || refuse "lessons propose: could not list the lesson directories"
+    while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        case "$d" in /*) ;; *) d="$top/$d" ;; esac
+        [ -d "$d" ] || continue
+        dirs="${dirs:+$dirs$'\n'}$(cd "$d" && pwd -P)"
+    done <<<"$raw"
+    rdirs="$(cmd_related_solutions_dirs)" || refuse "lessons propose: could not list the related lesson directories"
+    idx="$(lessons_index "$raw" "$rdirs")" || refuse "lessons propose: could not list the lessons"
+    lines="$(lesson_cites "$self" "$top" "$dirs")"
+    while IFS=$'\t' read -r kind tok res; do
+        case "$kind" in
+            C) b="${res##*/}" ;;
+            M) b="${tok%%#*}"; b="${b##*/}" ;;
+            *) continue ;;
+        esac
+        case "$b" in *.md) ;; *) continue ;; esac
+        [ "$b" != "${self##*/}" ] || continue
+        [ -n "$(lessons_resolve_name "$b" "$idx")" ] || continue
+        case "$rseen" in *$'\n'"$b"$'\n'*) continue ;; esac
+        rseen="$rseen$b"$'\n'
+        rel="${rel:+$rel, }$b"
+    done <<<"$lines"
+    printf 'paths: [%s]\nrelated: [%s]\n' "$out" "$rel"
+}
+
+cmd_lessons() {
+    local sub="${1:-}"
+    [ $# -gt 0 ] && shift
+    case "$sub" in
+        match|check|audit|flag|propose) ;;
+        *) die_usage "usage: sidecar.sh lessons <match|check|audit|flag|propose> ..." ;;
+    esac
+    "lessons_$sub" "$@"
+}
+
+verb="${1:-}"
+[ $# -gt 0 ] && shift
+# Fill probe_repo's cache in this shell, so the many $(do_resolve) and
+# $(current_keys) subshells below inherit it instead of probing again. Outside
+# a repo this only records the miss; each command still decides what that means.
+probe_repo || :
+case "$verb" in
+    resolve) [ $# -eq 0 ] || die_usage "usage: sidecar.sh resolve"; do_resolve || exit 1 ;;
+    init)    cmd_init "$@" ;;
+    config)  cmd_config "$@" ;;
+    base-ref) cmd_base_ref "$@" ;;
+    range)   cmd_range "$@" ;;
+    profile) cmd_profile "$@" ;;
+    path)    cmd_path "$@" ;;
+    solutions-dirs) cmd_solutions_dirs "$@" ;;
+    related-solutions-dirs) cmd_related_solutions_dirs "$@" ;;
+    relate)  cmd_relate "$@" ;;
+    migrate-archive) cmd_migrate_archive "$@" ;;
+    archive-dir) cmd_archive_dir "$@" ;;
+    commit)  cmd_commit "$@" ;;
+    require) cmd_require "$@" ;;
+    backend) cmd_backend "$@" ;;
+    stamp)   cmd_stamp "$@" ;;
+    fixrun)  cmd_fixrun "$@" ;;
+    footprint) cmd_footprint "$@" ;;
+    work)    cmd_work "$@" ;;
+    lessons) cmd_lessons "$@" ;;
+    trace)   cmd_trace "$@" ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|profile|path|solutions-dirs|related-solutions-dirs|relate|migrate-archive|archive-dir|commit|require|backend|stamp|fixrun|footprint|work|lessons|trace> ..." ;;
+esac
